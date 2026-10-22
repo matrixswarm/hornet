@@ -1,0 +1,87 @@
+name: Publish signed Hornet release
+
+on:
+  workflow_dispatch:
+    inputs:
+      index:
+        description: Package index
+        type: choice
+        options: [testpypi, pypi]
+        default: testpypi
+        required: true
+      dry_run:
+        description: Verify release preparation without uploading
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hornet-package-publishing
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.13'
+      - name: Verify and retrieve the signed GitHub package files
+        run: python scripts/publish_release.py prepare --directory "$RUNNER_TEMP/verified-release"
+      - name: Require a verified TestPyPI installation before production upload
+        if: inputs.index == 'pypi'
+        run: python scripts/publish_release.py verify-index --index testpypi --directory "$RUNNER_TEMP/testpypi-install"
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: verified-distributions
+          path: ${{ runner.temp }}/verified-release/dist/*
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    needs: prepare
+    if: ${{ !inputs.dry_run }}
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    environment:
+      name: ${{ inputs.index }}
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        with:
+          name: verified-distributions
+          path: dist/
+      - name: Publish through the configured trusted publisher
+        uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # release/v1
+        with:
+          repository-url: ${{ inputs.index == 'testpypi' && 'https://test.pypi.org/legacy/' || 'https://upload.pypi.org/legacy/' }}
+          print-hash: true
+
+  verify:
+    needs: publish
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.13'
+      - name: Download from the index and exercise a fresh installation
+        env:
+          PACKAGE_INDEX: ${{ inputs.index }}
+        run: python scripts/publish_release.py verify-index --index "$PACKAGE_INDEX" --directory "$RUNNER_TEMP/index-install"
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: index-verification
+          path: ${{ runner.temp }}/index-install/index-verification.json
+          if-no-files-found: error

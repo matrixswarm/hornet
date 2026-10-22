@@ -1,0 +1,46 @@
+# Publishing the signed public beta
+
+The `Publish signed Hornet release` workflow uploads the exact wheel and source
+distribution from the signed v0.15.1 GitHub release. It does not rebuild them.
+The release signature, manifest, package hashes and source commit are pinned in
+`scripts/publish_release.py`. A new version requires reviewed updates to those pins.
+
+## Account setup
+
+Configure a pending GitHub Trusted Publisher in each index account:
+
+| Field | TestPyPI | PyPI |
+| --- | --- | --- |
+| Project name | `matrixswarm-hornet` | `matrixswarm-hornet` |
+| Owner | `matrixswarm` | `matrixswarm` |
+| Repository | `hornet` | `hornet` |
+| Workflow filename | `publish.yml` | `publish.yml` |
+| Environment | `testpypi` | `pypi` |
+
+TestPyPI and PyPI have separate accounts. Complete sign-in and two-factor steps
+on their websites. No account password or API token belongs in the repository.
+The matching GitHub environments restrict deployment to the `main` branch.
+
+See the official guides for [pending publishers](https://docs.pypi.org/trusted-publishers/creating-a-project-through-oidc/)
+and [TestPyPI](https://packaging.python.org/en/latest/guides/using-testpypi/).
+
+## Publication order
+
+1. Run the workflow from `main`, targeting `testpypi`, with `dry_run` enabled.
+2. Run it again targeting `testpypi`, with `dry_run` disabled.
+3. Wait for the index download, fresh pip install and first-goal checks to pass.
+4. Run it targeting `pypi`, with `dry_run` disabled. Preparation repeats the
+   TestPyPI download and installation checks before production publication.
+5. Confirm the production verification job passes and inspect the project page.
+
+Only the upload job receives an OIDC permission. Index downloads must match the
+signed package hashes. Installation uses an isolated environment, a single
+index, the exact wheel hash and no dependency downloads. Failed uploads are not
+silently skipped; inspect any partial publication before retrying.
+
+The signing key authenticates the GitHub release bytes. PyPI's publisher
+attestations identify the GitHub workflow that uploaded those same bytes.
+
+Do not overwrite the signed release or move the v0.15.1 tag to publish these
+workflow changes. The publishing workflow is maintained on `main` independently
+of the frozen package source commit.

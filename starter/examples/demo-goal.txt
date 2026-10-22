@@ -1,0 +1,4 @@
+Fix calculator.py so double(n) returns 2*n for an integer n, with an integer return type.
+Required examples: double(-3) == -6, double(0) == 0, double(7) == 14.
+Only calculator.py may change. Preserve its public function name and argument.
+Keep the existing tests unchanged. Use one coding cell and verify the required behavior.

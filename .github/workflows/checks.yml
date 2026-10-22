@@ -1,0 +1,64 @@
+name: Hornet checks
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  unit:
+    name: Python ${{ matrix.python }} / ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python: ['3.9', '3.13']
+    env:
+      PYTHONUTF8: '1'
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Unit tests (no model or VM required)
+        run: python -m unittest discover -s tests -v
+
+  package:
+    name: Build and installed-wheel checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PYTHONUTF8: '1'
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.13'
+      - run: python -m pip install build twine
+      - run: python -m build
+      - run: python -m twine check --strict dist/*
+      - name: Install and test outside the checkout
+        shell: bash
+        run: |
+          python -m venv "$RUNNER_TEMP/hornet-env"
+          "$RUNNER_TEMP/hornet-env/bin/python" -m pip install --no-index --no-deps dist/*.whl
+          "$RUNNER_TEMP/hornet-env/bin/python" -m pip check
+          "$RUNNER_TEMP/hornet-env/bin/hornet" --version
+          cd "$RUNNER_TEMP"
+          "$RUNNER_TEMP/hornet-env/bin/python" -m unittest discover -s "$GITHUB_WORKSPACE/tests" -v
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: python-distributions
+          path: dist/*
+          if-no-files-found: error

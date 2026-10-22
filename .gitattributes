@@ -1,0 +1,5 @@
+# Preserve source bytes: worker receipts and release inventories use SHA-256.
+* -text
+*.whl binary
+*.zip binary
+*.gz binary

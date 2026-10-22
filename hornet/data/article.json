@@ -1,0 +1,9 @@
+{
+  "schema_version": 1,
+  "name": "article",
+  "description": "Draft an article with a configured model, or produce an explicit offline outline.",
+  "parameters": {"style": "conversational", "length_words": 800},
+  "prompt": "Write an article about {topic} in a {style} style, approximately {length_words} words. Be clear about uncertainty. Do not invent quotations, sources, or firsthand experience. Return the article only.",
+  "template": "# {topic}\n\n> Offline outline; no language model was used.\n\n## Introduction\nExplain the topic and the reader's main question.\n\n## Key points\n- Establish the necessary context.\n- Explain the main ideas with checked examples.\n- Discuss practical limits and tradeoffs.\n\n## Conclusion\nSummarize the evidence and useful next steps.\n\nStyle: {style}. Target draft length: {length_words} words.\n",
+  "steps": [{"action": "generate_article"}]
+}

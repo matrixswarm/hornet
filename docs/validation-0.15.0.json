@@ -1,0 +1,43 @@
+{
+  "version": "0.15.0",
+  "date": "2026-10-22",
+  "package_tests": {
+    "source-tests-py39": 383,
+    "source-tests-py313": 383,
+    "installed-tests": 383,
+    "ubuntu-worker": 383
+  },
+  "first_user": {
+    "environment": "Fresh Python 3.13 virtual environment on the existing Windows host; new Ubuntu 22.04 VirtualBox VM",
+    "vm_memory_mib": 1024,
+    "default_setup_memory_mib": 2048,
+    "offline_install": true,
+    "pip_check": true,
+    "local_doctor": true,
+    "file_contract_positive_and_negative": true,
+    "existing_project_refused": true,
+    "setup_checks": {
+      "existing_config_refused": true,
+      "bad_image_refused_before_key_or_vm_creation": true,
+      "script_syntax_passed": true
+    },
+    "real_model": "google/gemma-4-12b",
+    "goal_status": "completed",
+    "model_turns": 16,
+    "tool_calls": 5,
+    "values": {
+      "fix_calculator": -6
+    },
+    "original_vm_baseline_unchanged": true,
+    "completed_resume_refused_without_checkpoint_change": true
+  },
+  "wheel_sha256": "9cc5e7d9b0bcc05356ec95d187f32d58b39172a9fb4700939489907d0d872465",
+  "source_files": 106,
+  "limits": [
+    "Existing Windows host, not a fresh Windows installation.",
+    "One deliberately small coding goal; broader model reliability is not established by this demo.",
+    "No kernel, driver, hardware-wide or all-platform certification.",
+    "Process restart recovery is supported; uncertain operations stop for inspection.",
+    "Generated checks are fallible; completed changes remain for review."
+  ]
+}

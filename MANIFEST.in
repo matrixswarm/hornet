@@ -1,0 +1,6 @@
+include AUTHORS.md LICENSE README.md CHANGELOG.md CONTRIBUTING.md SECURITY.md
+recursive-include hornet/data *.json
+recursive-include tests *.py
+recursive-include docs *.md *.json
+recursive-include starter *.md *.py *.txt
+recursive-include signing *.asc *.fingerprint

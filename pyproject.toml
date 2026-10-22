@@ -1,0 +1,46 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "matrixswarm-hornet"
+version = "0.15.1"
+description = "Durable coding goals for local models: bounded context, checked results, and resumable work"
+readme = "README.md"
+license = "AGPL-3.0-only"
+license-files = ["LICENSE"]
+requires-python = ">=3.9"
+dependencies = []
+authors = [{name = "Daniel F. MacDonald"}]
+keywords = ["local-llm", "agents", "coding", "workflow", "lm-studio"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+]
+
+[project.urls]
+Homepage = "https://github.com/matrixswarm/hornet"
+Documentation = "https://github.com/matrixswarm/hornet/blob/main/starter/START-HERE.md"
+Repository = "https://github.com/matrixswarm/hornet.git"
+Issues = "https://github.com/matrixswarm/hornet/issues"
+Changelog = "https://github.com/matrixswarm/hornet/blob/main/CHANGELOG.md"
+
+[project.scripts]
+hornet = "hornet.cli:main"
+matrixswarm-hornet = "hornet.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["hornet", "hornet.*"]
+
+[tool.setuptools.package-data]
+hornet = ["data/*.json"]
+
+[tool.setuptools]
+include-package-data = false

@@ -3,9 +3,12 @@
 ## Public release 0.15.1
 
 This release adds publication metadata, the AGPL-3.0-only license, documentation,
-CI, a source distribution and a starter bundle. Every executable source file and
-unit test matches the frozen 0.15.0 baseline; the sole implementation edit is the
-version string in `hornet/__init__.py`. The VM setup helpers and demo are unchanged.
+CI, a source distribution and a starter bundle. Executable source matches the
+frozen 0.15.0 baseline; the sole implementation edit is the version string in
+`hornet/__init__.py`. The VM setup helpers and demo are unchanged. Three test
+fixtures now resolve temporary paths so Windows short names such as `RUNNER~1`
+and their long names identify the same test files and injected failure points.
+No checkpoint validation or test assertion was relaxed.
 
 The GitHub checks exercise Python 3.9 and 3.13 on Windows and Ubuntu. A separate
 job builds the wheel and source distribution, validates package metadata, installs

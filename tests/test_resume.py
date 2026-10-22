@@ -43,7 +43,7 @@ class ResumeTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(prefix='hornet-resume-')
         self.addCleanup(self.temp.cleanup)
-        root = Path(self.temp.name)
+        root = Path(self.temp.name).resolve()
         self.controller = root / 'controller'
         self.controller.mkdir()
         guest = root / 'guest'

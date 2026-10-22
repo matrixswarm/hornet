@@ -22,7 +22,7 @@ class CLITests(unittest.TestCase):
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory(prefix="hornet-test-")
         self.addCleanup(self.temporary.cleanup)
-        self.root = Path(self.temporary.name)
+        self.root = Path(self.temporary.name).resolve()
         self.env = patch.dict(os.environ, {"HORNET_ROOT": "", "HORNET_PATH": "", "HORNET_MODEL": "", "HORNET_API_KEY": ""})
         self.env.start()
         self.addCleanup(self.env.stop)

@@ -65,7 +65,7 @@ class AutonomousTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(prefix='hornet-autonomous-')
         self.addCleanup(self.temp.cleanup)
-        base = Path(self.temp.name)
+        base = Path(self.temp.name).resolve()
         self.root, self.guest = base / 'host', base / 'guest'
         self.root.mkdir()
         self.guest.mkdir()

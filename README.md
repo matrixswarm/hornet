@@ -9,6 +9,20 @@ context. Files, failed attempts and recovery evidence stay on disk.
 It is a command-line tool for developers using local models, including an
 OpenAI-compatible LM Studio server. Python 3.9+; no runtime Python dependencies.
 
+## Install from PyPI
+
+[Hornet on PyPI](https://pypi.org/project/matrixswarm-hornet/) is available as
+`matrixswarm-hornet`. Install it in a Python 3.9+ virtual environment:
+
+```console
+python -m pip install matrixswarm-hornet
+python -m hornet --version
+python -m hornet --help
+```
+
+The package also installs the `hornet` command. Follow the walkthrough below to
+configure a worker VM and connect your local model for coding goals.
+
 ## Try one completed goal
 
 1. Open the [v0.15.1 release](https://github.com/matrixswarm/hornet/releases/tag/v0.15.1).
@@ -86,8 +100,8 @@ On Linux/macOS:
 .venv/bin/hornet --version
 ```
 
-PyPI publication is a later step. The signed GitHub release is the current
-download path. See the [CLI reference](https://github.com/matrixswarm/hornet/blob/main/docs/CLI.md)
+The PyPI 0.15.1 wheel and source distribution match the files in the signed
+GitHub release. See the [CLI reference](https://github.com/matrixswarm/hornet/blob/main/docs/CLI.md)
 for goals, revisions, contracts and recovery commands.
 
 ## Project

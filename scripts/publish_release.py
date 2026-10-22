@@ -13,6 +13,8 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
+import urllib.error
 import urllib.parse
 import urllib.request
 import venv
@@ -31,6 +33,8 @@ FILES = {
 INDEXES = {"testpypi": "https://test.pypi.org", "pypi": "https://pypi.org"}
 RELEASE = "https://github.com/matrixswarm/hornet/releases/download/v" + VERSION + "/"
 ROOT = Path(__file__).resolve().parents[1]
+INDEX_DISCOVERY_ATTEMPTS = 13
+INDEX_DISCOVERY_DELAY_SECONDS = 10
 
 
 def require(condition, message):
@@ -102,9 +106,20 @@ def prepare(directory):
     print("Verified the signed release and both unchanged package files.", flush=True)
 
 
+def fetch_index_metadata(url):
+    for attempt in range(INDEX_DISCOVERY_ATTEMPTS):
+        try:
+            return json.loads(fetch(url))
+        except urllib.error.HTTPError as error:
+            if error.code != 404 or attempt + 1 == INDEX_DISCOVERY_ATTEMPTS:
+                raise
+            print("Release metadata is not visible yet; retrying the index lookup.", flush=True)
+            time.sleep(INDEX_DISCOVERY_DELAY_SECONDS)
+
+
 def verify_index(index, directory):
     host = INDEXES[index]
-    info = json.loads(fetch(host + "/pypi/" + PROJECT + "/" + VERSION + "/json"))
+    info = fetch_index_metadata(host + "/pypi/" + PROJECT + "/" + VERSION + "/json")
     require(info["info"]["version"] == VERSION, "Unexpected index version")
     indexed = {item["filename"]: item for item in info["urls"]}
     require(set(indexed) == set(FILES), "Index does not contain exactly the two approved distributions")

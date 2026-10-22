@@ -38,6 +38,28 @@ signed package hashes. Installation uses an isolated environment, a single
 index, the exact wheel hash and no dependency downloads. Failed uploads are not
 silently skipped; inspect any partial publication before retrying.
 
+After a new upload, the index may briefly return HTTP 404 for the release's JSON
+metadata. Verification retries that lookup up to 13 times, waiting 10 seconds
+between attempts. Other HTTP errors, invalid metadata and integrity failures
+still fail immediately. If verification fails after a successful upload, inspect
+its logs and rerun only the failed verification job once the issue is resolved.
+
+## Verified 0.15.1 publication
+
+On October 22, 2026, the signed wheel and source distribution were published to
+both indexes. Hash checks, fresh installation, CLI version and first-goal file
+contract checks passed in GitHub's Ubuntu runner and separate fresh Windows
+Python 3.13 environments:
+
+- [TestPyPI publication and verification](https://github.com/matrixswarm/hornet/actions/runs/39765058601)
+- [PyPI publication and verification](https://github.com/matrixswarm/hornet/actions/runs/39765482447)
+- [Installable PyPI release](https://pypi.org/project/matrixswarm-hornet/0.15.1/)
+
+Both first verification attempts encountered a temporary metadata 404 after
+successful uploads. Verification passed when rerun after the metadata appeared.
+Those failures remain in the workflow history; the bounded retry above was
+added afterward. These installation checks did not run a new live-model trial.
+
 The signing key authenticates the GitHub release bytes. PyPI's publisher
 attestations identify the GitHub workflow that uploaded those same bytes.
 

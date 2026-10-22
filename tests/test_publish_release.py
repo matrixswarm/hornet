@@ -5,6 +5,7 @@ from pathlib import Path
 import tempfile
 import unittest
 from unittest.mock import patch
+from urllib.error import HTTPError
 
 
 SCRIPT = Path(__file__).resolve().parents[1] / "scripts/publish_release.py"
@@ -20,6 +21,44 @@ class PublishingChecks(unittest.TestCase):
 
     def test_approved_manifest(self):
         self.assertEqual(self.helper.parse_manifest(self.manifest), self.helper.FILES)
+
+    def test_index_metadata_retries_temporary_not_found(self):
+        url = "https://test.pypi.org/pypi/matrixswarm-hornet/0.15.1/json"
+        missing = HTTPError(url, 404, "Not Found", None, None)
+        with patch.object(self.helper, "fetch", side_effect=[missing, b'{"ready": true}']) as fetch:
+            with patch.object(self.helper.time, "sleep") as sleep:
+                self.assertEqual(self.helper.fetch_index_metadata(url), {"ready": True})
+        self.assertEqual(fetch.call_count, 2)
+        sleep.assert_called_once_with(self.helper.INDEX_DISCOVERY_DELAY_SECONDS)
+
+    def test_index_metadata_retry_limit_is_enforced(self):
+        url = "https://test.pypi.org/pypi/matrixswarm-hornet/0.15.1/json"
+        missing = HTTPError(url, 404, "Not Found", None, None)
+        with patch.object(self.helper, "INDEX_DISCOVERY_ATTEMPTS", 2):
+            with patch.object(self.helper, "fetch", side_effect=missing) as fetch:
+                with patch.object(self.helper.time, "sleep") as sleep:
+                    with self.assertRaises(HTTPError):
+                        self.helper.fetch_index_metadata(url)
+        self.assertEqual(fetch.call_count, 2)
+        sleep.assert_called_once_with(self.helper.INDEX_DISCOVERY_DELAY_SECONDS)
+
+    def test_index_metadata_other_http_errors_are_not_retried(self):
+        url = "https://test.pypi.org/pypi/matrixswarm-hornet/0.15.1/json"
+        forbidden = HTTPError(url, 403, "Forbidden", None, None)
+        with patch.object(self.helper, "fetch", side_effect=forbidden) as fetch:
+            with patch.object(self.helper.time, "sleep") as sleep:
+                with self.assertRaises(HTTPError):
+                    self.helper.fetch_index_metadata(url)
+        self.assertEqual(fetch.call_count, 1)
+        sleep.assert_not_called()
+
+    def test_index_metadata_invalid_json_is_not_retried(self):
+        with patch.object(self.helper, "fetch", return_value=b"invalid") as fetch:
+            with patch.object(self.helper.time, "sleep") as sleep:
+                with self.assertRaises(json.JSONDecodeError):
+                    self.helper.fetch_index_metadata("https://test.pypi.org/pypi/example/json")
+        self.assertEqual(fetch.call_count, 1)
+        sleep.assert_not_called()
 
     def test_duplicate_manifest_entry_refused(self):
         with self.assertRaisesRegex(RuntimeError, "Duplicate"):

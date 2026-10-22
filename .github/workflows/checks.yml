@@ -16,7 +16,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        os: [ubuntu-22.04, windows-latest]
         python: ['3.9', '3.13']
     env:
       PYTHONUTF8: '1'
@@ -33,7 +33,7 @@ jobs:
 
   package:
     name: Build and installed-wheel checks
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     timeout-minutes: 15
     env:
       PYTHONUTF8: '1'

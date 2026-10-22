@@ -11,6 +11,7 @@ import uuid
 from urllib.parse import urlsplit
 
 from hornet.project import HornetError, write_text
+from hornet import hive
 from .agent import DEFAULT_NAMES, NAMES, SYSTEM, TOOLS, change_state, tool_result_content, validate_call
 from . import acceptance, ticket, read_refs, workspaces, operations, questions
 from .context import focus_messages
@@ -42,7 +43,7 @@ def ready(worker):
         raise HornetError("Worker must be ready in the dedicated Linux VM under a non-root account")
 
 
-def settings(args):
+def settings(args, project=None):
     value = {key: getattr(args, key) for key in ("worker_config", "max_tokens", "timeout", "max_turns", "max_tools")}
     value.update(model=args.model or os.environ.get("HORNET_MODEL"),
         base_url=args.base_url or os.environ.get("HORNET_BASE_URL", "http://127.0.0.1:1234/v1"),
@@ -50,11 +51,18 @@ def settings(args):
         tools=sorted(getattr(args, "tools", None) or DEFAULT_NAMES), max_repairs=getattr(args, "max_repairs", 2))
     if getattr(args, 'workspace', None) is not None:
         value['workspace'] = workspaces.identifier(args.workspace)
+    if project is not None:
+        hive.configure(project, args, value)
     validate_settings(value)
     return value
 
 
 def validate_settings(value):
+    if value.get('hive') is not None:
+        registry = hive.validate_binding(value['hive'])
+        profile = registry['agents'][value['hive']['agent']]
+        if any(value.get(key) != profile[key] for key in ('model', 'base_url', 'protocol')):
+            raise HornetError('Saved model settings differ from the named hive agent')
     if value.get('workspace') is not None:
         workspaces.identifier(value['workspace'])
     limits = {"max_turns": (1, 30), "max_tools": (1, 80), "max_tokens": (1, 16384),
@@ -152,14 +160,14 @@ def load(project, run):
 
 
 def work(project, args, worker=None, request_model=None, boundary=None):
-    config = settings(args)
+    config = settings(args, project)
     plan = acceptance.read(project, getattr(args, "acceptance_file", None))
     task = args.task or project.path(args.task_file).read_text(encoding="utf-8-sig")
     if not task.strip() or len(task) > 20000:
         raise HornetError("Coding ticket must contain 1-20000 characters")
     worker = worker or SSHWorker(project.path(config["worker_config"]), config.get('workspace'))
     lock_path = workspaces.lock_path(project, config, worker)
-    with WorkerLock(lock_path) as lock:
+    with WorkerLock(lock_path) as lock, hive.worker_claim(config, worker) as shared_lock:
         ready(worker)
         initial = worker.call("changes")
         if not initial.get("ok"):
@@ -168,6 +176,8 @@ def work(project, args, worker=None, request_model=None, boundary=None):
         run = project.path(Path(args.run_dir) / datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S.%fZ"), write=True)
         run.mkdir(parents=True)
         lock.set_run(run)
+        if shared_lock is not None:
+            shared_lock.set_run(run)
         job = {"schema_version": 2, "job_id": uuid.uuid4().hex, "project_root": str(project.root),
             "run_dir": str(run), "task": task, "settings": config, "snapshot": current,
             "initial_state": change_state(initial.get("files", [])), "phase": "model", "pending": [],
@@ -198,9 +208,12 @@ def resume(project, args, worker=None, request_model=None, boundary=None):
         value = questions.resolution(job['waiting_question'])
         if value is None or value['status'] == 'cancelled':
             return questions.outcome(job['waiting_question'], run)
+    candidate = dict(job['settings'])
+    hive.override(project, args, candidate)
+    validate_settings(candidate)
     worker = worker or SSHWorker(project.path(job["settings"]["worker_config"]), job['settings'].get('workspace'))
     lock_path = workspaces.lock_path(project, job['settings'], worker)
-    with WorkerLock(lock_path, run) as lock:
+    with WorkerLock(lock_path, run) as lock, hive.worker_claim(candidate, worker, run):
         # Re-read after acquiring the shared worker lock.
         job = load(project, run)
         if job["phase"] == "complete":
@@ -220,6 +233,7 @@ def resume(project, args, worker=None, request_model=None, boundary=None):
             raise HornetError("Resume paused: a command or edit was in flight and its outcome is unknown. Inspect the worker and checkpoint; it will not be replayed")
         if not checks["same_files"] and active is None:
             raise HornetError("Resume refused: workspace files changed since the last confirmed step: " + ", ".join(checks["changed_paths"][:8]))
+        hive.override(project, args, job['settings'])
         for key in ("model", "base_url", "max_turns", "max_tools", "max_tokens", "timeout", "context_chars", "protocol"):
             value = getattr(args, key, None)
             if value is not None:
@@ -343,7 +357,18 @@ def finish_operation(job, call, name, arguments, result, current, dispatched=Non
 def attempt(run, job, worker, request_model, boundary=None):
     config = SimpleNamespace(**job["settings"])
     selected = [tool for tool in TOOLS if tool["function"]["name"] in config.tools]
-    request_model = request_model or (lmstudio_json if config.protocol == "lmstudio-json" else completion)
+    backend_override = request_model
+    if not getattr(request_model, 'hive_managed', False):
+        def request_model(messages, offered, model, base_url, max_tokens, timeout):
+            profile = hive.select(job['settings'])
+            with hive.claim(profile, run):
+                protocol = profile['protocol'] if profile else config.protocol
+                backend = backend_override or (lmstudio_json if protocol == 'lmstudio-json' else completion)
+                reply, stats = backend(messages, offered, profile['model'] if profile else model,
+                    profile['base_url'] if profile else base_url, max_tokens, timeout)
+                if profile:
+                    stats = dict(stats, agent=profile['agent'])
+                return reply, stats
     job["attempts"] += 1
     audit = run / "attempts" / str(job["attempts"])
     while audit.exists():
@@ -388,7 +413,13 @@ def attempt(run, job, worker, request_model, boundary=None):
                 job["phase"] = "model_request"
                 save(run, job)
                 progress("model_request", turn=job["turns_used"], tools_used=job["tools_used"], **context)
-                message, stats = request_model(active, selected, config.model, config.base_url, config.max_tokens, config.timeout)
+                try:
+                    message, stats = request_model(active, selected, config.model, config.base_url, config.max_tokens, config.timeout)
+                except hive.AgentBusy:
+                    job['turns_used'] -= 1
+                    job['phase'] = 'model'
+                    save(run, job)
+                    raise
                 calls = message.get("tool_calls", [])
                 if not isinstance(calls, list) or len(calls) > 8:
                     raise HornetError("Invalid model tool-call batch")

@@ -55,6 +55,14 @@ Workers currently execute **sequentially**. Separate goal directories share the
 VM account; the dedicated VM supplies the execution boundary. Passing generated
 checks is evidence of the checked behavior, and exported code still needs review.
 
+## Named agents
+
+The development source supports a project-root `hive.json` mapping labels to
+model connections. Run `hornet hive init`, select `--agent gemma`, or assign an
+unfinished goal cell with `hornet hive assign RUN CELL --agent qwen`.
+See [the hive guide](docs/HIVE.md) for role routing, shared resource claims and
+resume. This feature is being developed after the published 0.15.1 package.
+
 ## Questions wait for you
 
 ```console

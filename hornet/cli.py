@@ -78,6 +78,7 @@ def build_parser():
     work.add_argument("--acceptance-file", help="Operator-authored JSON behavior checks, relative to project root")
     work.add_argument("--max-repairs", type=int, default=2, help="Automatic verification repair attempts (0-3; cumulative across resume)")
     work.add_argument("--model")
+    work.add_argument("--agent", help="Named model connection from the project hive.json")
     work.add_argument("--base-url")
     work.add_argument("--protocol", choices=("native", "lmstudio-json"), default="native",
                       help="Native tool calls or LM Studio constrained JSON actions with thinking disabled")
@@ -95,6 +96,7 @@ def build_parser():
     common(resume)
     resume.add_argument("run", help="Existing coding run directory inside the selected project")
     resume.add_argument("--model", help="Override the model for the next attempt")
+    resume.add_argument("--agent", help="Use a named agent from this job's saved hive")
     resume.add_argument("--base-url", help="Override the model endpoint for the next attempt")
     resume.add_argument("--max-turns", type=int, help="Total job turn limit, including earlier attempts (maximum 30)")
     resume.add_argument("--max-tools", type=int, help="Total job tool limit, including earlier attempts (maximum 80)")
@@ -116,6 +118,7 @@ def build_parser():
         goal.add_argument('--goal')
         goal.add_argument('--goal-file')
         auto.add_argument('--model')
+        auto.add_argument('--agent', help='Named default agent from hive.json; role and cell assignments still apply')
         auto.add_argument('--base-url')
         auto.add_argument('--protocol', choices=('native', 'lmstudio-json'), default='lmstudio-json')
         auto.add_argument('--max-tokens', type=int, default=3072)
@@ -139,6 +142,17 @@ def build_parser():
     auto_resume = commands.add_parser('autoresume', help='Continue a saved autonomous recipe with its frozen contracts')
     common(auto_resume)
     auto_resume.add_argument('run')
+    auto_resume.add_argument('--agent', help='Choose the default agent from this goal\'s saved hive')
+    hive = commands.add_parser('hive', help='Define named model connections and assign unfinished cells')
+    common(hive)
+    hive_commands = hive.add_subparsers(dest='hive_action', required=True)
+    common(hive_commands.add_parser('init', help='Create an editable hive.json without overwriting an existing one'))
+    common(hive_commands.add_parser('list', help='Validate and list configured agents without model requests'))
+    assign = hive_commands.add_parser('assign', help='Assign an unfinished cell at its next model request')
+    common(assign)
+    assign.add_argument('run', help='Exact autonomous goal run directory')
+    assign.add_argument('cell', help='Exact cell ID from that goal')
+    assign.add_argument('--agent', required=True, help='Label from the goal\'s saved hive')
     control = commands.add_parser('control', help='Queue file-based operator steering for an autonomous recipe')
     common(control)
     control.add_argument('run')
@@ -227,7 +241,7 @@ def render(args, result):
             print(result["error"])
         for path in result.get("changed_files", []):
             print("  " + path)
-    elif args.command in {'autowork', 'autoresume', 'control', 'revise', 'goals', 'goal-files'}:
+    elif args.command in {'autowork', 'autoresume', 'control', 'revise', 'goals', 'goal-files', 'hive'}:
         print(json.dumps(result, ensure_ascii=False, indent=2))
     elif args.command == "init":
         print("Project: {}\nCreated {} files; preserved {} existing files.".format(result["root"], len(result["created"]), len(result["preserved"])))

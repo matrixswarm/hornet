@@ -22,6 +22,7 @@ worker.json
 *.vdi
 *.iso
 /.hornet.json
+/hive.json
 /coding/
 /continue/
 /archive/

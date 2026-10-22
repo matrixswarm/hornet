@@ -59,6 +59,13 @@ def execute(args):
         target = args.path or args.root or os.environ.get("HORNET_ROOT") or os.environ.get("HORNET_PATH") or "."
         return initialize(args.name, target)
     project = Project(args.root, require=args.command in {"status", "archive"})
+    if args.command == 'hive':
+        from . import hive
+        if args.hive_action == 'init':
+            return hive.initialize(project)
+        if args.hive_action == 'list':
+            return hive.listing(project)
+        return hive.assign(project, args.run, args.cell, args.agent)
     if args.command in {'questions', 'answer'}:
         from .coding import questions
         if args.command == 'questions':

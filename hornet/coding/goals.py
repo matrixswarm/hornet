@@ -192,7 +192,11 @@ def revise(project, args, worker=None, request_model=None):
     args.worker_config = state['settings']['worker_config']
     args.source_workspace = state['settings'].get('workspace')
     args.revision = revision
-    for key in ('model', 'base_url'):
-        if getattr(args, key, None) is None:
-            setattr(args, key, state['settings'][key])
+    if not getattr(args, 'agent', None):
+        if (state['settings'].get('hive') and getattr(args, 'model', None) is None
+                and getattr(args, 'base_url', None) is None):
+            args.hive = state['settings']['hive']
+        for key in ('model', 'base_url'):
+            if getattr(args, key, None) is None:
+                setattr(args, key, state['settings'][key])
     return autonomous.start(project, args, worker, request_model)

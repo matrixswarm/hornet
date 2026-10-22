@@ -6,6 +6,7 @@ import time
 from types import SimpleNamespace
 
 from hornet.project import HornetError, write_text
+from hornet import hive
 from . import acceptance, cells, session, returns, mission, intake, tree, research, workspaces, goals, contract_review, questions
 from .agent import TOOLS, tool
 from .context import focus_messages, history_chars
@@ -69,7 +70,7 @@ def validate_limits(limits):
 
 
 def start(project, args, worker=None, request_model=None):
-    config = session.settings(args)
+    config = session.settings(args, project)
     goal = args.goal or project.path(args.goal_file).read_text(encoding='utf-8-sig')
     if not isinstance(goal, str) or not 1 <= len(goal.strip()) <= 12000:
         raise HornetError('Recipe goal requires 1-12000 characters')
@@ -77,7 +78,7 @@ def start(project, args, worker=None, request_model=None):
     validate_limits(limits)
     run = project.path(Path(args.run_dir) / datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S.%fZ'), write=True)
     worker = worker or SSHWorker(project.path(config['worker_config']), getattr(args, 'source_workspace', None))
-    with WorkerLock(workspaces.lock_path(project, config, worker), run):
+    with WorkerLock(workspaces.lock_path(project, config, worker), run), hive.worker_claim(config, worker, run):
         session.ready(worker)
         source = session.snapshot(worker)
         revision = getattr(args, 'revision', None)
@@ -179,9 +180,13 @@ def resume(project, args, worker=None, request_model=None):
         value = questions.resolution(reference)
         if value is None or value['status'] == 'cancelled':
             return questions.outcome(reference, run)
+    candidate = dict(state['settings'])
+    hive.override(project, args, candidate)
+    session.validate_settings(candidate)
     worker = worker or SSHWorker(project.path(state['settings']['worker_config']), state['settings'].get('workspace'))
-    with WorkerLock(workspaces.lock_path(project, state['settings'], worker), run):
+    with WorkerLock(workspaces.lock_path(project, state['settings'], worker), run), hive.worker_claim(candidate, worker, run):
         state = load(project, run)
+        hive.override(project, args, state['settings'])
         session.ready(worker)
         # A child job owns the exact source checkpoint while it is active.
         if state['phase'] != 'cell_running' and session.snapshot(worker) != state['snapshot']:
@@ -197,7 +202,6 @@ def resume(project, args, worker=None, request_model=None):
 def execute(project, run, state, worker, request_model):
     revision = goals.frozen(run, state, 'revision', 'revision.json')
     config = SimpleNamespace(**state['settings'])
-    backend = request_model or (lmstudio_json if config.protocol == 'lmstudio-json' else completion)
     state['attempts'] += 1
     audit = run / 'attempts' / str(state['attempts'])
     while audit.exists():
@@ -289,32 +293,45 @@ def execute(project, run, state, worker, request_model):
     def request(messages, offered, *options):
         if state['model_turns'] >= config.max_turns:
             raise HornetError('Autonomous recipe reached its total model-turn budget')
-        state['model_turns'] += 1
-        record = None
-        if state['schema_version'] >= 3:
-            names = [item['function']['name'] for item in offered]
-            record = {'request': state['model_turns'], 'attempt': state['attempts'],
-                'role': next((name for name in names if name.startswith('submit_')), state.get('active_cell', 'worker')),
-                'input_chars': history_chars(messages, offered), 'status': 'in_flight',
-                'prompt_tokens': None, 'output_tokens': None}
-            state['request_records'].append(record)
-        save()
-        try:
-            message, stats = backend(messages, offered, *options)
-        except BaseException:
-            if record is not None:
-                record['status'] = 'response_unavailable'
-                save()
-            raise
-        if record is not None:
-            usage = stats.get('usage', {}) if isinstance(stats, dict) else {}
-            usage = usage if isinstance(usage, dict) else {}
-            for target, source in [('prompt_tokens', 'prompt_tokens'), ('output_tokens', 'completion_tokens')]:
-                value = usage.get(source)
-                record[target] = value if type(value) is int and value >= 0 else None
-            record['status'] = 'response_received'
+        role_name = hive.request_role(offered)
+        profile = hive.select(state['settings'], role_name, state.get('active_cell'), run)
+        with hive.claim(profile, run):
+            state['model_turns'] += 1
+            record = None
+            if state['schema_version'] >= 3:
+                names = [item['function']['name'] for item in offered]
+                record = {'request': state['model_turns'], 'attempt': state['attempts'],
+                    'role': next((name for name in names if name.startswith('submit_')), state.get('active_cell', 'worker')),
+                    'input_chars': history_chars(messages, offered), 'status': 'in_flight',
+                    'prompt_tokens': None, 'output_tokens': None}
+                if profile:
+                    record.update(agent=profile['agent'], model=profile['model'])
+                state['request_records'].append(record)
             save()
-        return message, stats
+            try:
+                protocol = profile['protocol'] if profile else config.protocol
+                backend = request_model or (lmstudio_json if protocol == 'lmstudio-json' else completion)
+                if profile:
+                    options = (profile['model'], profile['base_url'], *options[2:])
+                message, stats = backend(messages, offered, *options)
+            except BaseException:
+                if record is not None:
+                    record['status'] = 'response_unavailable'
+                    save()
+                raise
+            if profile:
+                stats = dict(stats, agent=profile['agent'])
+            if record is not None:
+                usage = stats.get('usage', {}) if isinstance(stats, dict) else {}
+                usage = usage if isinstance(usage, dict) else {}
+                for target, source in [('prompt_tokens', 'prompt_tokens'), ('output_tokens', 'completion_tokens')]:
+                    value = usage.get(source)
+                    record[target] = value if type(value) is int and value >= 0 else None
+                record['status'] = 'response_received'
+                save()
+            return message, stats
+
+    request.hive_managed = True
 
     def role(key, instructions, submit_name, validator, address=None, expected_snapshot=None, task=None, read_files=None):
         address = address or key
@@ -413,7 +430,13 @@ def execute(project, run, state, worker, request_model):
             record['attempt_turns'] += 1
             save()
             progress(key)
-            message, stats = request(active, offered, config.model, config.base_url, config.max_tokens, config.timeout)
+            try:
+                message, stats = request(active, offered, config.model, config.base_url, config.max_tokens, config.timeout)
+            except hive.AgentBusy:
+                record['turns'] -= 1
+                record['attempt_turns'] -= 1
+                save()
+                raise
             if not isinstance(message, dict) or not isinstance(message.get('tool_calls', []), list):
                 raise HornetError('Malformed planning response')
             calls = message.get('tool_calls', [])
@@ -787,6 +810,8 @@ def execute(project, run, state, worker, request_model):
                 if result.get('status') in {'waiting_for_user', 'question_cancelled'}:
                     raise questions.WaitingForUser(child['waiting_question'])
                 if not result.get('ok'):
+                    if result.get('status') == 'waiting_for_agent':
+                        raise hive.AgentBusy(result['error'])
                     if result.get('status') == 'stopped_by_operator':
                         raise StopRequested(result.get('error', 'Recipe stopped by operator'))
                     raise HornetError('Cell did not verify: ' + ident + ': ' + result.get('error', result['status']))

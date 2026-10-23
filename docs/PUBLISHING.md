@@ -45,6 +45,28 @@ between attempts. Other HTTP errors, invalid metadata and integrity failures
 still fail immediately. If verification fails after a successful upload, inspect
 its logs and rerun only the failed verification job once the issue is resolved.
 
+## Verified 0.16.0 publication
+
+On October 23, 2026, the signed 0.16.0 wheel and source distribution were
+published through the trusted GitHub publisher. The dry run verified the
+release signature and package hashes. TestPyPI then accepted both files and
+passed a fresh installation and first-goal check. The production workflow
+rechecked TestPyPI before publishing the same signed files to PyPI, where its
+fresh installation and first-goal check also passed.
+
+- [Signed GitHub release](https://github.com/matrixswarm/hornet/releases/tag/v0.16.0)
+- [Publishing dry run](https://github.com/matrixswarm/hornet/actions/runs/39907813430)
+- [TestPyPI publication and verification](https://github.com/matrixswarm/hornet/actions/runs/39907908865)
+- [PyPI publication and verification](https://github.com/matrixswarm/hornet/actions/runs/39908076188)
+- [Installable PyPI release](https://pypi.org/project/matrixswarm-hornet/0.16.0/)
+
+Both indexes list the exact wheel SHA-256
+`823f464da273fa5dc930a8dc209523a7724f78ccb8a681a8bb3763fb26a022bc`
+and source distribution SHA-256
+`a5dd7b071227c354fa42d0135744d89ddcc066f943d6d37dd75bfa5b5d76b6a0`
+from the signed GitHub release. The workflow did not rerun the separate live
+model trial described in [the validation scope](VALIDATION.md).
+
 ## Verified 0.15.1 publication
 
 On October 22, 2026, the signed wheel and source distribution were published to

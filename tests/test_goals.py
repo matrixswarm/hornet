@@ -10,6 +10,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
+from hornet import hive_status
 from hornet.cli import build_parser
 from hornet.coding import autonomous, goals, mission, session, workspaces
 from hornet.coding.transport import SSHWorker
@@ -139,7 +140,7 @@ class GoalTests(unittest.TestCase):
         self.assertTrue(first['ok'], first)
         parent = Path(first['run_dir'])
         before = {p.relative_to(parent).as_posix(): p.read_bytes() for p in parent.rglob('*') if p.is_file()}
-        self.args = build_parser().parse_args(['revise', str(parent), '--file', 'number.py', '--run-dir', 'runs',
+        self.args = build_parser().parse_args(['revise', str(parent), '--cell', 'double', '--run-dir', 'runs',
             '--goal', 'Add triple(n) returning n * 3 to number.py. Preserve double(n).'])
         source = ForkWorker(self.base / first['workspace'], self.base)
         self.turn = 0
@@ -150,6 +151,25 @@ class GoalTests(unittest.TestCase):
         self.assertEqual(before, {p.relative_to(parent).as_posix(): p.read_bytes() for p in parent.rglob('*') if p.is_file()})
         state = autonomous.load(self.project, Path(result['run_dir']))
         self.assertTrue(goals.regression_evidence(Path(result['run_dir']), state)['reports'])
+        revision = goals.frozen(Path(result['run_dir']), state, 'revision', 'revision.json')
+        self.assertEqual(revision['source_cell']['id'], 'double')
+        self.assertEqual(revision['source_cell']['files'], ['number.py'])
+        self.assertEqual(revision['source_cell']['value'], 6)
+        self.assertTrue(revision['source_cell']['return_manifest'])
+        self.assertTrue(revision['source_cell']['changed_files'])
+        observed = hive_status.snapshot(self.project, run=result['run_dir'])
+        self.assertTrue(observed['ok'], observed['warnings'])
+        self.assertEqual(observed['goals'][0]['revision']['source_cell_id'], 'double')
+        self.assertEqual(observed['goals'][0]['revision']['parent_run'], str(parent))
+
+    def test_revision_cell_requires_verified_code_cell(self):
+        first = self.start()
+        run = Path(first['run_dir'])
+        state = autonomous.load(self.project, run)
+        with self.assertRaisesRegex(HornetError, 'verified code cell'):
+            goals.route_cell(run, state, 'missing')
+        with self.assertRaisesRegex(HornetError, 'verified code cell'):
+            goals.route_cell(run, dict(state, values={}), 'double')
 
     def test_new_checks_cannot_hide_a_parent_regression(self):
         first = self.start()

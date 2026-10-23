@@ -306,10 +306,19 @@ class BoundedContextTests(unittest.TestCase):
         from hornet.coding.role_schema import recon_schema
         required = [{'id': 'r001'}, {'id': 'r002'}]
         intake = recon_schema('submit_intake', required, 3)
-        coverage = intake['properties']['plan']['properties']['coverage']
+        self.assertEqual(len(intake['anyOf']), 3)
+        self.assertEqual([variant['properties']['mode']['const'] for variant in intake['anyOf']],
+                         ['delegate', 'execute', 'delegate-and-work'])
+        self.assertEqual(intake['anyOf'][0]['properties']['self_cell_id']['const'], '')
+        self.assertEqual(intake['anyOf'][1]['properties']['plan']['properties']['cells']['maxItems'], 1)
+        self.assertEqual(intake['anyOf'][2]['properties']['plan']['properties']['cells']['minItems'], 2)
+        coverage = intake['anyOf'][0]['properties']['plan']['properties']['coverage']
         self.assertEqual(coverage['minItems'], 2)
         self.assertEqual(coverage['maxItems'], 2)
         self.assertEqual(coverage['items']['properties']['requirement_id']['enum'], ['r001', 'r002'])
+        self.assertEqual(coverage['items']['properties']['cell_ids']['minItems'], 1)
+        with self.assertRaises(ValueError):
+            validate_arguments({'requirement_id': 'r001', 'cell_ids': []}, coverage['items'])
         route = recon_schema('submit_route', required, 3)
         valid = {'schema_version': 1, 'route': 'execute', 'reason': 'Small task', 'plan': copy.deepcopy(tree.EMPTY)}
         validate_arguments(valid, route)

@@ -5,7 +5,7 @@ import json
 import unittest
 from unittest.mock import patch
 
-from hornet.coding import autonomous, cells, mission, research, tree
+from hornet.coding import autonomous, cells, intake, mission, research, tree
 from hornet.coding.role_schema import recon_schema
 from hornet.project import HornetError
 from test_resume import call
@@ -203,7 +203,7 @@ class ResearchTests(unittest.TestCase):
 
     def test_schema_exposes_complete_closed_variants(self):
         schema = recon_schema('submit_intake', [{'id': 'r001'}], 3, research=True)
-        plan = schema['anyOf'][0]['properties']['plan']['properties']
+        plan = schema['properties']['plan']['properties']
         self.assertEqual(plan['schema_version']['const'], 3)
         variants = plan['cells']['items']['anyOf']
         self.assertEqual({v['properties']['kind']['const'] for v in variants}, {'research', 'code'})
@@ -212,8 +212,9 @@ class ResearchTests(unittest.TestCase):
             self.assertFalse(variant['additionalProperties'])
         from hornet.coding.model import validate_arguments
         value = {'schema_version': 1, 'mode': 'execute', 'reason': 'small', 'self_cell_id': 'inspect', 'plan': self.plan}
-        with self.assertRaises(ValueError):
-            validate_arguments(value, schema)
+        validate_arguments(value, schema)
+        with self.assertRaisesRegex(HornetError, 'Invalid ownership'):
+            intake.validate(value, mission.document(self.args.goal), 3)
         value.update(mode='delegate', self_cell_id='')
         validate_arguments(value, schema)
 

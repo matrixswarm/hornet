@@ -68,6 +68,17 @@ def validate(run, state):
         acceptance.validate(item['plan'])
         if item['sha256'] != acceptance.digest(item['plan']):
             raise HornetError('Inherited regression check changed')
+    source_cell = revision.get('source_cell')
+    if source_cell is not None:
+        if not isinstance(source_cell, dict):
+            raise HornetError('Selected revision cell lineage changed')
+        prior = next((item for item in revision['context'] if item['id'] == source_cell.get('id')), None)
+        if (prior is None
+                or source_cell['id'] not in revision['affected_cells']
+                or source_cell['files'] != revision['targets']
+                or any(source_cell[key] != prior[key] for key in ('files', 'result', 'return_manifest'))
+                or not isinstance(source_cell.get('changed_files'), list)):
+            raise HornetError('Selected revision cell lineage changed')
     if state['plan'] is not None:
         validate_scope(revision, state['plan'])
     changed = {name for name in state['snapshot']['files'].keys() | state['initial_snapshot']['files'].keys()
@@ -130,12 +141,34 @@ def route(run, state, targets):
             'policy': 'Preserve all inherited checks. Intentional incompatible changes require a separately reviewed contract.'}
 
 
+def route_cell(run, state, ident):
+    """Select a verified cell by ID and retain its exact prior result lineage."""
+    if not isinstance(ident, str):
+        raise HornetError('Select an exact verified code cell ID')
+    cell = next((item for item in tree.all_cells(state) if item['id'] == ident), None)
+    if cell is None or cell.get('kind', 'code') != 'code' or ident not in state['values']:
+        raise HornetError('Revision requires an exact verified code cell ID')
+    revision = route(run, state, cell['files'])
+    ref = state['cells'][ident].get('return_manifest')
+    if not ref or mission.reference(run, run / ref['path']) != ref:
+        raise HornetError('Selected cell has no matching verified return manifest')
+    receipt = mission.read(run / ref['path'])
+    if receipt.get('cell_id') != ident or receipt.get('contract') != cell or receipt.get('status') != 'verified':
+        raise HornetError('Selected cell return does not match its frozen contract')
+    revision['source_cell'] = {'id': ident, 'task': cell['task'], 'files': cell['files'],
+        'result': cell['result'], 'value': state['values'][ident],
+        'return_manifest': ref, 'changed_files': receipt['changed_files']}
+    return revision
+
+
 def brief(revision):
     if revision is None:
         return ''
     value = {key: revision[key] for key in ('targets', 'allowed_files', 'affected_cells')}
     value['interfaces'] = [{'cell': c['id'], 'path': c['result'].get('path'),
                             'function': c['result'].get('function')} for c in revision['context']]
+    if revision.get('source_cell'):
+        value['source_cell'] = revision['source_cell']
     return ('\nController revision routing (data): ' + acceptance.encoded(value) +
             '\nImplement the requested follow-up in these files. Preserve earlier behavior; inherited goal checks '
             'will be rerun. Prior transcripts and full source are retained outside this prompt. Read only the relevant files.')
@@ -188,11 +221,16 @@ def revise(project, args, worker=None, request_model=None):
     from . import autonomous
     parent = project.path(args.run)
     state = autonomous.load(project, parent)
-    revision = route(parent, state, args.files)
+    revision = (route_cell(parent, state, args.cell) if getattr(args, 'cell', None)
+                else route(parent, state, args.files))
     args.worker_config = state['settings']['worker_config']
     args.source_workspace = state['settings'].get('workspace')
     args.revision = revision
-    for key in ('model', 'base_url'):
-        if getattr(args, key, None) is None:
-            setattr(args, key, state['settings'][key])
+    if not getattr(args, 'agent', None):
+        if (state['settings'].get('hive') and getattr(args, 'model', None) is None
+                and getattr(args, 'base_url', None) is None):
+            args.hive = state['settings']['hive']
+        for key in ('model', 'base_url'):
+            if getattr(args, key, None) is None:
+                setattr(args, key, state['settings'][key])
     return autonomous.start(project, args, worker, request_model)

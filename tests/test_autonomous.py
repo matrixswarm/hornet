@@ -300,7 +300,6 @@ class AutonomousTests(unittest.TestCase):
                 injected[0] = True
                 for index in range(8):
                     send(self.project, str(self.run_dir()), 'message', 'Keep the cell focused. ' + 'x' * 1800)
-                return call('read_file', {'path': 'parity_cell.py'}, 'read-context'), {}
             return original(messages, tools)
         result = autonomous.start(self.project, self.args, self.worker, model)
         self.assertTrue(result['ok'], result)

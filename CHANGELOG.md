@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.16.0 — 2026-10-23
+
+Named hive agents may be assigned to unfinished cells, with local or compatible
+remote model endpoints and shared inference claims. The read-only hive terminal
+shows goals, cells, recorded activity and an inverted tree; exact cell commands
+resume an unfinished cell or create a linked revision from a completed one.
+
+Autonomous goals can bind exact production files, use simpler literal-call return
+contracts, request review of a root plan, and retain bounded recovery attempts.
+Closeout receipts record verification and lease release. The controller keeps
+failed attempts and frozen checks across resumes. Model roles and cells still run
+sequentially on one worker; automatic crash restart and concurrent execution are
+not included.
+
 ## 0.15.1 — 2026-10-22
 
 First public GitHub packaging release: focused README, first-goal walkthrough,

@@ -250,28 +250,26 @@ class MissionTests(unittest.TestCase):
             autonomous.resume(self.project, argparse.Namespace(run=str(self.run_dir())), self.worker, self.model)
         self.assertEqual(self.worker.calls.count('run_command'), commands)
 
-    def test_goal_verifier_cannot_repeat_reads_after_two_observations(self):
-        reads = [0]
+    def test_goal_verifier_uses_frozen_requirements_without_source_reads(self):
+        offered = []
         def model(messages, tools, *unused):
             names = {item['function']['name'] for item in tools}
-            if 'submit_goal_checks' in names and 'read_file' in names:
-                reads[0] += 1
-                return call('read_file', {'path': 'parity_cell.py'}, 'goal-read-' + str(reads[0])), {}
             if 'submit_goal_checks' in names:
-                self.assertEqual(reads[0], 2)
                 self.assertEqual(names, {'submit_goal_checks'})
+                self.assertIn('Declared interfaces:', messages[1]['content'])
+                offered.append(names)
             return self.model(messages, tools)
         result = self.run_goal(model)
         self.assertTrue(result['ok'], result)
-        self.assertEqual(reads[0], 2)
+        self.assertEqual(len(offered), 1)
 
     def test_resumed_role_archives_old_context_and_starts_focused(self):
-        reads = [0]
+        turns = [0]
         def interrupted(messages, tools, *unused):
             if 'submit_goal_checks' in {item['function']['name'] for item in tools}:
-                reads[0] += 1
-                if reads[0] == 1:
-                    return call('read_file', {'path': 'parity_cell.py'}, 'old-role-read'), {}
+                turns[0] += 1
+                if turns[0] == 1:
+                    return {'role': 'assistant', 'content': 'OLD_ROLE_OBSERVATION'}, {}
                 raise HornetError('Temporary verifier failure')
             return self.model(messages, tools)
         self.assertFalse(self.run_goal(interrupted)['ok'])
@@ -279,7 +277,7 @@ class MissionTests(unittest.TestCase):
         def retry(messages, tools, *unused):
             if 'submit_goal_checks' in {item['function']['name'] for item in tools}:
                 self.assertIn('Temporary verifier failure', json.dumps(messages))
-                self.assertNotIn('old-role-read', json.dumps(messages))
+                self.assertNotIn('OLD_ROLE_OBSERVATION', json.dumps(messages))
             return self.model(messages, tools)
         result = autonomous.resume(self.project, argparse.Namespace(run=str(self.run_dir())), self.worker, retry)
         self.assertTrue(result['ok'], result)

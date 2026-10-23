@@ -36,6 +36,11 @@ class LiteralTests(unittest.TestCase):
             review.preflight('offset(3)=7.', 'submit_plan', plan(schema={'type': 'integer'}))
         review.preflight('offset(3)=7.', 'submit_plan', plan())
 
+    def test_wrong_return_shape_explains_the_actual_value(self):
+        with self.assertRaisesRegex(HornetError, 'call must return 7'):
+            review.preflight('offset(3)=7.', 'submit_plan', plan(schema={
+                'type': 'object', 'properties': {'offset': {'type': 'string'}}}))
+
     def test_conflicting_examples_fail_closed(self):
         with self.assertRaisesRegex(HornetError, 'Conflicting'):
             review.examples('offset(3)=7; offset(3)=34.')

@@ -3,6 +3,7 @@ import ast
 import builtins
 import hashlib
 import json
+import symtable
 
 from hornet.project import HornetError, write_text
 from . import acceptance, cells
@@ -147,6 +148,34 @@ def reject_early_helper_calls(checks):
                     bound.update(alias.asname or alias.name.split('.')[0] for alias in node.names)
 
 
+def reject_unbound_check_globals(checks):
+    """Reject obvious unbound names in new generated checks before freezing.
+
+    This does not execute code or prove control flow. Explicit imports and
+    assignments are required; dynamic injection is not inferred. Local scopes,
+    comprehension variables and attributes are resolved by Python's symbol table.
+    """
+    for check in checks['checks']:
+        root = symtable.symtable(check['python'], '<hornet-acceptance>', 'exec')
+        bound = set(dir(builtins)) | {'__name__', '__builtins__'}
+        referenced = set()
+        def visit(scope, module=False):
+            for symbol in scope.get_symbols():
+                if module or symbol.is_global():
+                    if symbol.is_assigned() or symbol.is_imported() or symbol.is_namespace():
+                        bound.add(symbol.get_name())
+                    if symbol.is_referenced():
+                        referenced.add(symbol.get_name())
+            for child in scope.get_children():
+                visit(child)
+        visit(root, module=True)
+        missing = referenced - bound
+        if missing:
+            raise HornetError('Check %s uses undefined names: %s. Import or assign them explicitly '
+                'before use. Check for a literal backslash-n inside a comment swallowing an assignment; '
+                'submit plain Python source with real line breaks.' % (check['id'], ', '.join(sorted(missing))))
+
+
 def packet(state, cell):
     assigned = {item['requirement_id'] for item in state['plan']['coverage'] if cell['id'] in item['cell_ids']}
     value = {'schema_version': 1, 'kind': 'cell_work', 'goal_sha256': state['goal_sha256'],
@@ -194,7 +223,11 @@ def binding(state, cell):
 def validate(run, state):
     if state['schema_version'] < 3:
         return
-    from . import contract_review
+    from . import contract_review, planning, recovery, contract_wire, file_scope
+    planning.validate(run, state)
+    file_scope.validate(run, state)
+    recovery.validate(run, state)
+    contract_wire.validate(run, state)
     contract_review.validate(run, state)
     from . import intake
     intake.validate_state(run, state)

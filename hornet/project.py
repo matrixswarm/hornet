@@ -43,7 +43,8 @@ class Project:
 
     @staticmethod
     def recognized(path):
-        return (path / ".hornet.json").is_file() or (path / "continue/goals").is_dir()
+        return ((path / ".hornet.json").is_file() or (path / "hive.json").is_file()
+                or (path / "continue/goals").is_dir())
 
     def path(self, value, write=False):
         raw = Path(value).expanduser()

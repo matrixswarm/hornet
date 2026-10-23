@@ -73,7 +73,14 @@ def oracle_schema(packet):
     return schema
 
 
-def recon_schema(name, requirements, max_cells, research=False):
+def check_schema(name, paths):
+    """Constrain generated check path choices to their frozen source scope."""
+    schema = copy.deepcopy(DOCUMENTS[name])
+    schema['properties']['checks']['items']['properties']['paths']['items']['enum'] = sorted(set(paths))
+    return schema
+
+
+def recon_schema(name, requirements, max_cells, research=False, file_paths=None):
     """Expose stage-specific closed choices to constrained generation as well as validation."""
     schema = copy.deepcopy(DOCUMENTS[name])
     plan = schema['properties']['plan']
@@ -81,6 +88,7 @@ def recon_schema(name, requirements, max_cells, research=False):
     coverage = plan['properties']['coverage']
     coverage.update(minItems=len(ids), maxItems=len(ids))
     coverage['items']['properties']['requirement_id']['enum'] = ids
+    coverage['items']['properties']['cell_ids']['minItems'] = 1
     plan['properties']['cells']['maxItems'] = max_cells
     if research:
         plan['properties']['schema_version']['const'] = 3
@@ -97,26 +105,33 @@ def recon_schema(name, requirements, max_cells, research=False):
         read = obj(dict(copy.deepcopy(CELL['properties']), kind={'type': 'string', 'const': 'research'},
                         result=obj({'schema': typed_schema})))
         plan['properties']['cells']['items'] = {'anyOf': [code, read]}
+    if file_paths is not None:
+        for variant in plan['properties']['cells']['items'].get('anyOf', [plan['properties']['cells']['items']]):
+            variant['properties']['files']['items']['enum'] = sorted(set(file_paths))
+            result = variant['properties']['result']['properties']
+            if 'path' in result:
+                result['path']['enum'] = sorted(set(file_paths))
     if name == 'submit_intake':
         if research:
-            variants = []
-            for mode in ('delegate', 'execute', 'delegate-and-work'):
-                if mode == 'delegate-and-work' and max_cells == 1:
-                    continue
-                variant = copy.deepcopy(schema)
-                props = variant['properties']
-                props['mode'] = {'type': 'string', 'const': mode}
-                props['self_cell_id'] = ({'type': 'string', 'const': ''} if mode == 'delegate'
-                                        else {'type': 'string', 'minLength': 1})
-                if mode == 'execute':
-                    props['plan']['properties']['cells']['maxItems'] = 1
-                if mode == 'delegate-and-work':
-                    props['plan']['properties']['cells']['minItems'] = 2
-                variants.append(variant)
-            return {'anyOf': variants}
-        if max_cells == 1:
-            schema['properties']['mode']['enum'] = ['execute', 'delegate']
-        return schema
+            # Research/code cell variants already make this schema large.
+            # Ownership is checked by intake.validate after submission; avoid
+            # tripling the plan schema inside the model's fixed context.
+            return schema
+        variants = []
+        for mode in ('delegate', 'execute', 'delegate-and-work'):
+            if mode == 'delegate-and-work' and max_cells == 1:
+                continue
+            variant = copy.deepcopy(schema)
+            props = variant['properties']
+            props['mode'] = {'type': 'string', 'const': mode}
+            props['self_cell_id'] = ({'type': 'string', 'const': ''} if mode == 'delegate'
+                                    else {'type': 'string', 'minLength': 1})
+            if mode == 'execute':
+                props['plan']['properties']['cells']['maxItems'] = 1
+            if mode == 'delegate-and-work':
+                props['plan']['properties']['cells']['minItems'] = 2
+            variants.append(variant)
+        return {'anyOf': variants}
     schema['properties']['route'] = {'type': 'string', 'const': 'needs_split'}
     plan['properties']['cells']['minItems'] = 2
     execute = copy.deepcopy(schema)

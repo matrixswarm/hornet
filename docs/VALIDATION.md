@@ -1,5 +1,23 @@
 # Validation scope
 
+## 0.16.0 goal-controller iteration
+
+This release adds named model agents, a read-only hive terminal, exact cell
+resume and linked revision commands, frozen file scopes, simpler literal-call
+return contracts, root-plan review, bounded recovery and closeout receipts.
+Execution remains sequential. The terminal observes local saved records; it
+does not orchestrate controllers across machines or restart a crashed process.
+
+The October 23 live Gemma 12B/Qwen 9B invoice trial completed a two-cell goal
+in 24 model turns and 9 tool calls. Both cells were verified; the original VM
+baseline and test fixture were unchanged. Independent checks of the exported
+two-module result passed. This is one focused trial, not a reliability estimate.
+
+The signed release's `VALIDATION.json` records the exact source commit, package
+hashes and local checks. GitHub CI runs Python 3.9 and 3.13 on Windows and
+Ubuntu, plus an installed-wheel job. Inspect those workflow results for the
+release commit; the live trial was separate from CI.
+
 ## Public release 0.15.1
 
 This release adds publication metadata, the AGPL-3.0-only license, documentation,

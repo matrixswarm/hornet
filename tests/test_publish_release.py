@@ -23,7 +23,7 @@ class PublishingChecks(unittest.TestCase):
         self.assertEqual(self.helper.parse_manifest(self.manifest), self.helper.FILES)
 
     def test_index_metadata_retries_temporary_not_found(self):
-        url = "https://test.pypi.org/pypi/matrixswarm-hornet/0.15.1/json"
+        url = "https://test.pypi.org/pypi/matrixswarm-hornet/" + self.helper.VERSION + "/json"
         missing = HTTPError(url, 404, "Not Found", None, None)
         with patch.object(self.helper, "fetch", side_effect=[missing, b'{"ready": true}']) as fetch:
             with patch.object(self.helper.time, "sleep") as sleep:
@@ -32,7 +32,7 @@ class PublishingChecks(unittest.TestCase):
         sleep.assert_called_once_with(self.helper.INDEX_DISCOVERY_DELAY_SECONDS)
 
     def test_index_metadata_retry_limit_is_enforced(self):
-        url = "https://test.pypi.org/pypi/matrixswarm-hornet/0.15.1/json"
+        url = "https://test.pypi.org/pypi/matrixswarm-hornet/" + self.helper.VERSION + "/json"
         missing = HTTPError(url, 404, "Not Found", None, None)
         with patch.object(self.helper, "INDEX_DISCOVERY_ATTEMPTS", 2):
             with patch.object(self.helper, "fetch", side_effect=missing) as fetch:
@@ -43,7 +43,7 @@ class PublishingChecks(unittest.TestCase):
         sleep.assert_called_once_with(self.helper.INDEX_DISCOVERY_DELAY_SECONDS)
 
     def test_index_metadata_other_http_errors_are_not_retried(self):
-        url = "https://test.pypi.org/pypi/matrixswarm-hornet/0.15.1/json"
+        url = "https://test.pypi.org/pypi/matrixswarm-hornet/" + self.helper.VERSION + "/json"
         forbidden = HTTPError(url, 403, "Forbidden", None, None)
         with patch.object(self.helper, "fetch", side_effect=forbidden) as fetch:
             with patch.object(self.helper.time, "sleep") as sleep:

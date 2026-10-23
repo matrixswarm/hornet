@@ -208,8 +208,13 @@ def main(request):
     base = Path('/home/hornet/workspace')
     root = base / 'goals' / workspace if workspace else base / 'hornet_cli'
     no_links(root)
-    api = runpy.run_path('/opt/hornet-worker/worker.py')
-    worker = api['Worker'](root)
+    try:
+        api = runpy.run_path('/opt/hornet-worker/worker.py')
+        worker = api['Worker'](root)
+    except Exception as exc:
+        print(json.dumps({'ok': False, 'status': 'refused',
+                          'error': 'Worker deployment is not ready at ' + root.as_posix() + ': ' + str(exc)[:300]}))
+        return
     def snapshot():
         files = {}
         for directory, dirs, names in os.walk(worker.root, followlinks=False):

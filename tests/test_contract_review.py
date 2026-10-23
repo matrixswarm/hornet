@@ -3,8 +3,9 @@ import argparse
 import copy
 import json
 import unittest
+from unittest.mock import patch
 
-from hornet.coding import autonomous, contract_review as review, mission
+from hornet.coding import autonomous, contract_review as review, contract_wire, mission
 from hornet.project import HornetError
 import test_autonomous as fixtures
 from test_resume import call
@@ -18,6 +19,48 @@ def plan(args='[3]', schema=None):
 
 
 class LiteralTests(unittest.TestCase):
+    def test_calculator_plan_selects_one_of_three_required_examples(self):
+        goal = 'double(-3) == -6, double(0) == 0, double(7) == 14.'
+        proposal = plan('[7]', {'type': 'integer', 'enum': [14]})
+        proposal['cells'][0]['result'].update(path='calculator.py', function='double')
+        review.preflight(goal, 'submit_intake', {'plan': proposal})
+        proposal['cells'][0]['result']['schema_json'] = '{"type":"integer","enum":[-6,0,14]}'
+        with self.assertRaisesRegex(HornetError, 'exact example'):
+            review.preflight(goal, 'submit_intake', {'plan': proposal})
+        with self.assertRaisesRegex(HornetError, 'one Python call'):
+            contract_wire.parse_call('[double(-3), double(0), double(7)]')
+
+    def test_review_instructions_distinguish_plan_and_check_coverage(self):
+        for submission in review.SUBMISSIONS:
+            prompt = review.review_prompt(submission)
+            if submission in {'submit_checks', 'submit_goal_checks'}:
+                self.assertIn(review.CHECK_REVIEW, prompt)
+                self.assertNotIn(review.PLAN_REVIEW, prompt)
+            else:
+                self.assertIn(review.PLAN_REVIEW, prompt)
+                self.assertNotIn(review.CHECK_REVIEW, prompt)
+        with self.assertRaises(HornetError):
+            review.review_prompt('write_file')
+
+    def test_changed_review_instructions_get_new_cache_identity(self):
+        state = {'roles': {}, 'goal': 'offset(3)=7.', 'goal_sha256': 'goal'}
+        first = review.packet(state, 'intake', 'submit_intake', {'plan': plan()}, None, {})
+        legacy = dict(first)
+        legacy.pop('review_instructions_sha256')
+        self.assertNotEqual(review.acceptance.digest(first), review.acceptance.digest(legacy))
+        with patch.object(review, 'PLAN_REVIEW', review.PLAN_REVIEW + ' Changed guidance.'):
+            second = review.packet(state, 'intake', 'submit_intake', {'plan': plan()}, None, {})
+        self.assertNotEqual(review.acceptance.digest(first), review.acceptance.digest(second))
+        self.assertEqual(first['candidate'], second['candidate'])
+
+    def test_review_presents_candidate_last_without_changing_evidence(self):
+        packet = {'candidate': {'checks': []}, 'requirements': 'Required behavior', 'role': 'verifier'}
+        before = review.acceptance.digest(packet)
+        presented = review.review_task(packet)
+        self.assertEqual(json.loads(presented), packet)
+        self.assertEqual(list(json.loads(presented))[-1], 'candidate')
+        self.assertEqual(review.acceptance.digest(packet), before)
+
     def test_exact_typed_examples(self):
         found = review.examples('offset(3)=7, offset(-5)=-9. f(true) returns false. g("3") == "7".')
         self.assertEqual([e['expected'] for e in found], [7, -9, False, '7'])
@@ -121,6 +164,27 @@ class ReviewWorkflowTests(unittest.TestCase):
         completion = mission.read(self.run_dir() / 'goal-completion.json')
         self.assertEqual(len(completion['contract_reviews']), 3)
 
+    def test_one_return_call_with_multiple_examples_reaches_independent_checks(self):
+        self.prepare()
+        self.args.goal += ' Other required examples: is_even(0)=true; is_even(-3)=false.'
+        stages = []
+        def model(messages, tools, *unused):
+            if any(t['function']['name'] == 'submit_contract_review' for t in tools):
+                packet = json.loads(messages[1]['content'])
+                submission = packet['submission']
+                stages.append(submission)
+                self.assertIn(review.review_prompt(submission), messages[0]['content'])
+                self.assertEqual(packet['review_instructions_sha256'],
+                                 review.acceptance.digest(review.review_prompt(submission)))
+                if submission == 'submit_intake':
+                    self.assertEqual(len(packet['literal_examples']), 3)
+                    self.assertEqual(len(packet['candidate']['plan']['cells']), 1)
+            return self.model(messages, tools, *unused)
+        result = autonomous.start(self.project, self.args, self.worker, model)
+        self.assertTrue(result['ok'], result)
+        self.assertEqual(stages, ['submit_intake', 'submit_goal_checks', 'submit_checks'])
+        self.assertEqual(self.state()['roles']['intake']['invalid_submissions'], 0)
+
     def test_wrong_argument_is_returned_to_author_before_freeze(self):
         self.prepare()
         self.plan['cells'][0]['result']['args_json'] = '["3"]'
@@ -201,6 +265,34 @@ class ReviewWorkflowTests(unittest.TestCase):
         second = autonomous.resume(self.project, argparse.Namespace(run=str(self.run_dir())), self.worker, self.model)
         self.assertTrue(second['ok'], second)
         self.assertEqual(before, (self.run_dir() / 'attempts/1/result.json').read_bytes())
+
+    def test_resume_rechecks_legacy_rejection_and_preserves_its_evidence(self):
+        self.prepare()
+        original_packet = review.packet
+        def legacy_packet(*args, **kwargs):
+            packet = original_packet(*args, **kwargs)
+            packet.pop('review_instructions_sha256')
+            return packet
+        def legacy_model(messages, tools, *unused):
+            if any(t['function']['name'] == 'submit_contract_review' for t in tools):
+                return call('submit_contract_review', {'decision': 'revise',
+                    'issues': ['Put every example in the result call.'],
+                    'rationale': 'Old reviewer confused the return call with acceptance tests.'}, 'old-review'), {}
+            return self.model(messages, tools, *unused)
+        with patch.object(review, 'packet', legacy_packet):
+            first = autonomous.start(self.project, self.args, self.worker, legacy_model)
+        self.assertFalse(first['ok'])
+        self.assertIsNone(self.state()['plan'])
+        old = {path: path.read_bytes() for path in (self.run_dir() / 'contract-reviews').glob('*.json')}
+        self.assertTrue(old)
+        second = autonomous.resume(self.project, argparse.Namespace(run=str(self.run_dir())), self.worker, self.model)
+        self.assertTrue(second['ok'], second)
+        for path, content in old.items():
+            self.assertEqual(path.read_bytes(), content)
+        state = autonomous.load(self.project, self.run_dir())
+        approved = mission.read(self.run_dir() / state['roles']['intake']['contract_review']['path'])
+        self.assertIn('review_instructions_sha256', approved['packet'])
+        self.assertEqual(len(state['roles']['intake']['review_attempts']), 2)
 
     def test_missing_or_changed_review_prevents_resume(self):
         self.prepare()

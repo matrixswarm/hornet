@@ -25,14 +25,14 @@ configure a worker VM and connect your local model for coding goals.
 
 ## Try one completed goal
 
-1. Open the [v0.16.0 release](https://github.com/matrixswarm/hornet/releases/tag/v0.16.0).
+1. Open the [v0.16.1 release](https://github.com/matrixswarm/hornet/releases/tag/v0.16.1).
 2. Download the **starter ZIP**, `SHA256SUMS`, `SHA256SUMS.asc`, the public signing
    key and `VERIFY-RELEASE.md`.
 3. Verify the download, extract it, and follow **START-HERE.md** inside.
 
 The walkthrough installs Hornet, checks a local file contract, creates a new
 Ubuntu worker VM and asks your local model to fix a small Python function.
-The starter VM setup currently targets **Windows + VirtualBox**. The model runs
+The starter VM setup supports **Windows or Linux hosts with VirtualBox**. The model runs
 on the host; agent code runs inside the dedicated VM.
 
 Read the [first-goal walkthrough](https://github.com/matrixswarm/hornet/blob/main/starter/START-HERE.md)
@@ -108,9 +108,17 @@ On Linux/macOS:
 .venv/bin/hornet --version
 ```
 
-The PyPI 0.16.0 wheel and source distribution match the files in the signed
-GitHub release. See the [CLI reference](https://github.com/matrixswarm/hornet/blob/main/docs/CLI.md)
+Our publishing workflow verifies the signed GitHub package files before uploading
+those same bytes to PyPI. See the [CLI reference](https://github.com/matrixswarm/hornet/blob/main/docs/CLI.md)
 for goals, revisions, contracts and recovery commands.
+
+### Upgrading from 0.16.0
+
+Version 0.16.1 fixes ambiguous contract-review instructions and adds Linux host
+setup and stronger worker preflight. Install the new version in a separate
+environment and use its matching starter for a new worker. Preserve the old
+environment, VM, keys and saved goals together: the new controller refuses
+mismatched worker code, and this release does not migrate existing deployments.
 
 ## Project
 
@@ -119,6 +127,9 @@ credited in [AUTHORS.md](https://github.com/matrixswarm/hornet/blob/main/AUTHORS
 See [CONTRIBUTING.md](https://github.com/matrixswarm/hornet/blob/main/CONTRIBUTING.md)
 for development and [SECURITY.md](https://github.com/matrixswarm/hornet/blob/main/SECURITY.md)
 for the execution boundary and reporting.
+
+The [roadmap](docs/ROADMAP.md) records planned work, including a Strategy-pattern
+builder that assembles agent implementations through durable contracts.
 
 ## License
 

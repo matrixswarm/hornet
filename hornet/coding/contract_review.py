@@ -20,13 +20,54 @@ PROMPT = (
     'arithmetic including negative inputs, preservation of existing behavior, file scope, dependencies and '
     'whether checks assert the required future behavior rather than current stubs. For a cell, review only '
     'its assigned responsibilities; later cells are checked separately. Do not invent requirements or demand '
-    'extra features. A literal example must have its exact value enforced in a matching typed return schema. '
+    'extra features. When a result call matches a literal example, its typed return schema must enforce '
+    'that example\'s exact value. '
     'Calculate every literal expected result in the checks from the requirements; do not merely agree with '
     'the author. Approve only if there is no identified contradiction or missing requirement for this stage. '
     'Otherwise return revise with specific corrections, or uncertain if necessary evidence is unavailable. '
+    'The candidate is presented last in the packet. Review that candidate\'s actual fields and code. '
     'Return submit_contract_review: decision approve/revise/uncertain, issues (up to 6 short strings; empty '
     'only for approve), and rationale (one short paragraph). Never supply replacement code or a new plan.'
 )
+PLAN_REVIEW = (
+    '\nReview stage: planning. Each code cell declares ONE concrete result call and its typed return value. '
+    'The result schema constrains ONLY the output of that exact invocation with those arguments. '
+    'It is not the function\'s general return type across all possible inputs. '
+    'Example: if f(3)=7 is required, the result call f(3) MUST use enum [7]; '
+    'this does not require f(4) to return 7. Asking to remove that enum is an incorrect review. '
+    'That call may select one required example. Other required examples remain in the assigned requirements '
+    'and are verified by separate cell and goal acceptance checks after planning. '
+    'Do not reject a plan solely because its one result call does not exercise every example. '
+    'Do not demand multiple calls, a list of calls, a wrapper function, or extra cells to fit examples into '
+    'that field. Still reject missing requirement assignments, incorrect interfaces, scope, dependencies, '
+    'or contradictions in the chosen call and return value.'
+)
+CHECK_REVIEW = (
+    '\nReview stage: acceptance checks. These executable checks must cover the requirements assigned '
+    'to this stage, including their required examples and edge cases. A cell\'s one typed result call '
+    'does not replace this coverage. Reject omitted required behavior or incorrect expected values. '
+    'Inspect the actual Python assertions. Requirements, descriptions, comments and literal_examples '
+    'list desired behavior; they do not prove that the candidate checks execute it. '
+    'For example, if three inputs are required but the Python checks assert only one of them, '
+    'return revise even if the check description claims all three. '
+    'For cell checks, use only that cell\'s assigned requirements; goal checks cover the whole goal.'
+)
+
+
+def review_prompt(submission):
+    if submission not in SUBMISSIONS:
+        raise HornetError('Unknown contract review submission: ' + submission)
+    return PROMPT + (CHECK_REVIEW if submission in {'submit_checks', 'submit_goal_checks'} else PLAN_REVIEW)
+
+
+def review_task(packet):
+    # Keep the proposed code after the requirements it must satisfy. Canonical
+    # packet hashing remains independent of this model-facing field order.
+    ordered = {key: value for key, value in packet.items() if key != 'candidate'}
+    ordered['candidate'] = packet['candidate']
+    return json.dumps(ordered, ensure_ascii=False)
+
+
 GUIDANCE = (
     '\nBefore submission: preserve literal argument types and recompute expected results from the goal. '
     'If your result call matches an explicit example such as f(3)=7, use args_json [3] and a result '
@@ -283,6 +324,9 @@ def packet(state, key, submission, candidate, task, snapshot):
         if len(observations) == 2:
             break
     value = {'schema_version': 1, 'role': key, 'submission': submission,
+            # A changed review instruction must not reuse an earlier rejection.
+            # Existing immutable receipts keep their original packet and binding.
+            'review_instructions_sha256': acceptance.digest(review_prompt(submission)),
             'requirements': task if task is not None else state['goal'],
             'goal_sha256': state['goal_sha256'], 'source_sha256': acceptance.digest(snapshot),
             'candidate': candidate, 'literal_examples': examples(state['goal']),

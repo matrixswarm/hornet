@@ -56,9 +56,16 @@ print(json.dumps(result))
 class SSHWorker:
     operation_protocol = 1
 
+    def preflight(self):
+        from .preflight import check
+        return check(self)
+
     def __init__(self, config_path, workspace=None):
         self.workspace = workspaces.identifier(workspace) if workspace is not None else None
         config = read_json(config_path)
+        if isinstance(config, dict) and any(key in config for key in ('model', 'api_key', 'tools', 'max_turns', 'max_tools', 'context_chars')):
+            raise HornetError('worker.json contains model or agent settings. It holds only the pinned SSH connection; '
+                              'select models with hive.json/--agent or --model, and supply credentials through HORNET_API_KEY')
         if not isinstance(config, dict) or config.get("host") != "127.0.0.1":
             raise HornetError("Coding worker must use the dedicated localhost VM connection")
         self.port = config.get("port")

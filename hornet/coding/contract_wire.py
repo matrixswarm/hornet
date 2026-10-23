@@ -46,6 +46,8 @@ CALL_GUIDANCE = (
     'no expressions, imports, nested calls or unpacking. A dependency is a literal dictionary such as '
     "consume({'$cell': 'earlier-id'}). "
     'Research results still contain schema only. Do not submit separate function, args, kwargs or encoded JSON fields. '
+    'This field declares one returned value; separate acceptance checks verify the other required examples. '
+    'Do not combine multiple calls in this field or invent a wrapper to collect test results. '
     'The controller parses the call without executing its text and handles storage encoding. '
     'An object return schema must specify properties, required and additionalProperties explicitly.')
 CALL_INTAKE_PROMPT = INTAKE_PROMPT.replace(

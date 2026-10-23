@@ -14,6 +14,7 @@ import time
 BLOCKED = {".git", ".venv", "venv", "__pycache__"}
 MAX_FILE = 256 * 1024
 MAX_REPLY = 1500 * 1024
+READY_MARKER = '/opt/hornet-worker/ready'
 
 
 class WorkerError(Exception):
@@ -60,9 +61,21 @@ class Worker:
                     yield item
 
     def status(self):
+        checks = {'provisioning_marker': Path(READY_MARKER).is_file(),
+                  'git_metadata': (self.root / '.git').is_dir() and not (self.root / '.git').is_symlink(),
+                  'git_root': False, 'git_head': False}
+        if checks['git_metadata']:
+            try:
+                base = ['git', '-C', str(self.root), 'rev-parse']
+                top = subprocess.run(base + ['--show-toplevel'], capture_output=True, text=True, timeout=10)
+                head = subprocess.run(base + ['--verify', 'HEAD'], capture_output=True, text=True, timeout=10)
+                checks['git_root'] = top.returncode == 0 and Path(top.stdout.strip()).resolve() == self.root
+                checks['git_head'] = head.returncode == 0 and bool(re.fullmatch(r'[0-9a-f]{40}|[0-9a-f]{64}', head.stdout.strip()))
+            except (OSError, ValueError, subprocess.TimeoutExpired):
+                pass
         return {"ok": True, "platform": sys.platform, "uid": os.getuid() if hasattr(os, "getuid") else None,
                 "root": str(self.root), "python": sys.version.split()[0],
-                "ready": (self.root / ".git").is_dir() and Path("/opt/hornet-worker/ready").exists(),
+                "ready": all(checks.values()), 'readiness_checks': checks, 'worker_protocol': 1,
                 "sandbox": "dedicated-virtualbox-vm"}
 
     def list_files(self, path="."):

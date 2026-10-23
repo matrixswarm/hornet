@@ -1,8 +1,8 @@
 # Create your first coding worker
 
 This walkthrough creates a new disposable Ubuntu VM containing the starter
-exercise. Your model continues to run in LM Studio on Windows. Install VirtualBox
-and Windows OpenSSH first. Run from the extracted starter folder after step 1 of
+exercise. Your model continues to run in LM Studio on the host. Install VirtualBox
+and an OpenSSH client first. Run from the extracted starter folder after step 1 of
 `START-HERE.md`. No administrator PowerShell or script-policy change is needed.
 
 ## Download and check Ubuntu
@@ -24,7 +24,7 @@ package upgrades or silently install guest packages. The image is not bundled.
 Hornet itself has no runtime Python dependencies.
 
 ```powershell
-.\.venv\Scripts\python.exe -m pip install pycdlib==1.14.0
+.\.venv\Scripts\python.exe -m pip install --no-index --no-deps --find-links .\dependencies pycdlib==1.14.0
 $image = 'C:\Downloads\jammy-server-cloudimg-amd64.vmdk'
 $imageHash = 'PASTE_THE_FULL_SHA256_FOR_THAT_IMAGE'
 $vmFolder = Join-Path $env:USERPROFILE 'VirtualBox VMs'
@@ -36,6 +36,34 @@ refuses existing VM names, private-key directories and worker configurations.
 It generates fresh keys, restricts the local private directory to your Windows
 account, and binds the SSH forwarding port to `127.0.0.1`. The VM uses NAT with
 outbound networking. Shared folders, clipboard and drag-and-drop are not enabled.
+
+### Linux host
+
+The starter kit's `tools/start_linux.py --download-image` performs the complete
+Linux setup, including image download and checksum verification. See the Linux
+Linux section in START-HERE.md. The following commands are the manual option.
+
+Run these commands on the Linux host that runs VirtualBox and LM Studio.
+Use a fresh extracted starter folder and the project created by `first_run.py`.
+Set `image` and `image_hash` to the cloud VMDK and its exact published checksum:
+
+```bash
+.venv/bin/python -m pip install --no-index --no-deps --find-links ./dependencies pycdlib==1.14.0
+image="$HOME/Downloads/jammy-server-cloudimg-amd64.vmdk"
+image_hash='PASTE_THE_FULL_SHA256_FOR_THAT_IMAGE'
+.venv/bin/python tools/prepare_worker.py --project ./my-first-goal --image "$image" --image-sha256 "$image_hash" --vm-parent "$HOME/VirtualBox VMs" --name hornet-linux-first --port 2224
+.venv/bin/hornet --root ./my-first-goal worker-status --worker-config worker.json --json
+```
+
+The helper finds `VBoxManage` and `ssh-keygen` on PATH. It creates the private
+directory with mode 0700 and its files with mode 0600. Use another unused VM
+name and port if needed. It never adopts, resets or deletes an existing VM.
+
+Do not handcraft `worker.json`, copy an existing Hermes worker, change workspace
+paths, or create readiness markers manually. The generated guest uses the
+`hornet` account, matching root-owned worker code, an initialized baseline Git
+repository and a forced SSH entry point. A successful preflight verifies those
+parts together before any model turn. A failure reports the checks that failed.
 
 The guest account `hornet` has no sudo access. Its SSH key accepts the fixed
 worker entry point. Agent Python still runs as that guest account; the dedicated

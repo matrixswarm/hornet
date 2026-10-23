@@ -32,6 +32,11 @@ class ScopedWorker:
     def operation_protocol(self):
         return getattr(self.worker, 'operation_protocol', None)
 
+    def preflight(self):
+        if callable(getattr(type(self.worker), 'preflight', None)):
+            return self.worker.preflight()
+        return self.worker.call('status')
+
     def operation_allowed(self, name, arguments):
         # Autonomous coding cells offer edits, not unrestricted commands.
         return name in {'edit_file', 'write_file'} and arguments.get('path') in self.allowed
@@ -592,9 +597,9 @@ def _execute(project, run, state, worker, request_model):
                                                'rationale': 'Execute the existing reviewed contract; no new contract.'}
                                     origin = 'unchanged_contract'
                                 else:
-                                    verdict = role('contract-review-' + review_id, contract_review.PROMPT,
+                                    verdict = role('contract-review-' + review_id, contract_review.review_prompt(submit_name),
                                         'submit_contract_review', contract_review.verdict,
-                                        expected_snapshot=expected_snapshot, task=acceptance.encoded(packet))
+                                        expected_snapshot=expected_snapshot, task=contract_review.review_task(packet))
                                     origin = 'fresh_model_context'
                             receipt = {'schema_version': 1, 'packet': packet, 'verdict': verdict, 'origin': origin}
                             if oracle is not None:

@@ -1,9 +1,9 @@
-# Hornet 0.15.1 — your first completed goal
+# Hornet 0.16.0 — your first completed goal
 
 Give a local model a small coding goal. Hornet keeps the work, checks and recovery
 state in a separate goal directory, then exports the result for your review.
 
-The downloadable starter kit includes the 0.15.1 wheel, its matching source, a small
+The downloadable starter kit includes the 0.16.0 wheel, its matching source, a small
 Python exercise and a setup tool for a **new dedicated Ubuntu VM**. Start with the
 installation check, then complete the coding exercise. The Windows walkthrough
 uses Python 3.9+, OpenSSH and VirtualBox. The model runs on your Windows host.
@@ -16,12 +16,12 @@ environment's executable directly; activating scripts is unnecessary.
 
 ```powershell
 py -3 -m venv .venv
-.\.venv\Scripts\python.exe -m pip install --no-index --no-deps .\matrixswarm_hornet-0.15.1-py3-none-any.whl
+.\.venv\Scripts\python.exe -m pip install --no-index --no-deps .\matrixswarm_hornet-0.16.0-py3-none-any.whl
 .\.venv\Scripts\hornet.exe --version
 .\.venv\Scripts\python.exe .\tools\first_run.py --project .\my-first-goal
 ```
 
-Expected: `matrixswarm-hornet 0.15.1`, followed by `INSTALLATION CHECK PASSED`.
+Expected: `matrixswarm-hornet 0.16.0`, followed by `INSTALLATION CHECK PASSED`.
 The check initializes a new project, runs local diagnostics, and verifies a
 small file contract. It does not contact a model. It refuses to overwrite a
 project, so choose another name for a second trial.

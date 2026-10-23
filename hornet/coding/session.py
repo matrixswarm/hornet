@@ -13,7 +13,7 @@ from urllib.parse import urlsplit
 from hornet.project import HornetError, write_text
 from hornet import hive
 from .agent import DEFAULT_NAMES, NAMES, SYSTEM, TOOLS, change_state, tool_result_content, validate_call
-from . import acceptance, ticket, read_refs, workspaces, operations, questions
+from . import acceptance, ticket, read_refs, workspaces, operations, questions, activity, recovery
 from .context import focus_messages
 from .locking import WorkerLock
 from .model import completion, lmstudio_json
@@ -43,7 +43,7 @@ def ready(worker):
         raise HornetError("Worker must be ready in the dedicated Linux VM under a non-root account")
 
 
-def settings(args, project=None):
+def settings(args, project=None, *, max_turns_cap=30):
     value = {key: getattr(args, key) for key in ("worker_config", "max_tokens", "timeout", "max_turns", "max_tools")}
     value.update(model=args.model or os.environ.get("HORNET_MODEL"),
         base_url=args.base_url or os.environ.get("HORNET_BASE_URL", "http://127.0.0.1:1234/v1"),
@@ -53,11 +53,11 @@ def settings(args, project=None):
         value['workspace'] = workspaces.identifier(args.workspace)
     if project is not None:
         hive.configure(project, args, value)
-    validate_settings(value)
+    validate_settings(value, max_turns_cap=max_turns_cap)
     return value
 
 
-def validate_settings(value):
+def validate_settings(value, *, max_turns_cap=30):
     if value.get('hive') is not None:
         registry = hive.validate_binding(value['hive'])
         profile = registry['agents'][value['hive']['agent']]
@@ -65,7 +65,7 @@ def validate_settings(value):
             raise HornetError('Saved model settings differ from the named hive agent')
     if value.get('workspace') is not None:
         workspaces.identifier(value['workspace'])
-    limits = {"max_turns": (1, 30), "max_tools": (1, 80), "max_tokens": (1, 16384),
+    limits = {"max_turns": (1, max_turns_cap), "max_tools": (1, 80), "max_tokens": (1, 16384),
               "timeout": (1, 900), "context_chars": (8000, 200000), "max_repairs": (0, 3)}
     for key, (low, high) in limits.items():
         if type(value.get(key)) is not int or not low <= value[key] <= high:
@@ -187,6 +187,8 @@ def work(project, args, worker=None, request_model=None, boundary=None):
             "verification_rounds": 0, "repairs_used": 0}
         if getattr(worker, 'context_window', None) is not None:
             job['context_window'] = worker.context_window
+        if getattr(worker, 'detect_stagnation', False):
+            job['detect_stagnation'] = True
         if getattr(worker, 'operation_protocol', None) == 1:
             job['operation_protocol'] = 1
         if getattr(worker, 'question_scope', None) is not None:
@@ -241,6 +243,8 @@ def resume(project, args, worker=None, request_model=None, boundary=None):
         validate_settings(job["settings"])
         if job["turns_used"] > job["settings"]["max_turns"] or job["tools_used"] > job["settings"]["max_tools"]:
             raise HornetError("Resume limits cannot be lower than the job's recorded usage")
+        if getattr(args, 'handoff', None) is not None:
+            recovery.apply(job, args.handoff)
         if job.get('waiting_question'):
             reference = job['waiting_question']
             answer = questions.receive(reference)
@@ -269,6 +273,9 @@ def resume(project, args, worker=None, request_model=None, boundary=None):
             observe(job, call, name, arguments, {"ok": False, "interrupted": True,
                 "error": "Read-only result was lost. Request it again if needed; no operation was replayed."})
             job["phase"] = "dispatch" if job["pending"] else "model"
+        # Windows are per attempt; the full operation history remains intact.
+        job.pop('stagnation_window', None)
+        job.pop('stagnated', None)
         job["history"].append({"resume": {"observed_at": now(), "confirmed_tools": job["tools_used"],
             "recovered_stale_lock": bool(lock.previous), "settings": job["settings"].copy()}})
         job["needs_resume_context"] = True
@@ -346,15 +353,23 @@ def finish_operation(job, call, name, arguments, result, current, dispatched=Non
     if active is not None:
         job['history'][-1]['operation_id'] = active['id']
     stop = repeated_edit(job, name, arguments, result, current['files'] != job['snapshot']['files'])
+    stagnated = recovery.observe(job, name, arguments, current)
+    if stagnated or stop and job.get('detect_stagnation'):
+        job['stagnated'] = True
     if name in {'edit_file', 'write_file'} and result.get('ok') is not True:
         job['needs_resume_context'] = True
     job['snapshot'] = current
     job['pending'].pop(0)
     job['phase'] = 'dispatch' if job['pending'] else 'model'
-    return stop
+    return stop or stagnated
 
 
 def attempt(run, job, worker, request_model, boundary=None):
+    with activity.running(run):
+        return _attempt(run, job, worker, request_model, boundary)
+
+
+def _attempt(run, job, worker, request_model, boundary=None):
     config = SimpleNamespace(**job["settings"])
     selected = [tool for tool in TOOLS if tool["function"]["name"] in config.tools]
     backend_override = request_model
@@ -362,12 +377,16 @@ def attempt(run, job, worker, request_model, boundary=None):
         def request_model(messages, offered, model, base_url, max_tokens, timeout):
             profile = hive.select(job['settings'])
             with hive.claim(profile, run):
+                activity.record(run, 'model_request', agent=profile['agent'] if profile else None,
+                    model=profile['model'] if profile else model)
                 protocol = profile['protocol'] if profile else config.protocol
                 backend = backend_override or (lmstudio_json if protocol == 'lmstudio-json' else completion)
                 reply, stats = backend(messages, offered, profile['model'] if profile else model,
                     profile['base_url'] if profile else base_url, max_tokens, timeout)
                 if profile:
-                    stats = dict(stats, agent=profile['agent'])
+                    stats = dict(stats, agent=profile['agent'], model=profile['model'])
+                activity.record(run, 'model_response', agent=profile['agent'] if profile else None,
+                    model=profile['model'] if profile else model)
                 return reply, stats
     job["attempts"] += 1
     audit = run / "attempts" / str(job["attempts"])
@@ -381,6 +400,12 @@ def attempt(run, job, worker, request_model, boundary=None):
         "turns_used": job["turns_used"], "tools_used": job["tools_used"]}, indent=2))
     save(run, job)
     started = time.monotonic()
+    def action(event, tool=None):
+        stats = (job.get('history') or [{}])[-1].get('stats', {})
+        stats = stats if isinstance(stats, dict) else {}
+        activity.record(run, event, job.get('question_scope', {}).get('cell_id'),
+            agent=stats.get('agent'), model=stats.get('model', config.model), tool=tool)
+
     def progress(stage, **details):
         write_text(run / "progress.json", json.dumps(dict(stage=stage, observed_at=now(),
             seconds=round(time.monotonic() - started, 3), attempt=job["attempts"], **details), indent=2), force=True)
@@ -459,6 +484,7 @@ def attempt(run, job, worker, request_model, boundary=None):
                     save(run, job)
                     questions.publish(reference)
                     raise questions.WaitingForUser(reference)
+                action('worker_tool', name)
                 previous = job.get("repeated_edit", {})
                 if (name in {"edit_file", "write_file"} and previous.get("count", 0) >= 3
                         and previous.get("signature") == edit_signature(name, arguments)):
@@ -506,7 +532,10 @@ def attempt(run, job, worker, request_model, boundary=None):
                     current = snapshot(worker)
                 stop_repeating = finish_operation(job, call, name, arguments, result, current, dispatched)
                 save(run, job)
+                action('tool_returned', name)
                 if stop_repeating:
+                    if job.get('stagnated'):
+                        raise recovery.Stagnated('Repeated operations on unchanged source; request a bounded fresh-context handoff')
                     raise HornetError("Stopped after three identical unsuccessful edits; inspect the current source and change the approach")
             elif job["phase"] == "final_tests":
                 job["verification_rounds"] += 1

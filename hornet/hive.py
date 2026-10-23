@@ -74,7 +74,7 @@ def endpoint(profile):
 
 def validate(document):
     if (not isinstance(document, dict) or not {'schema_version', 'default_agent', 'agents'} <= set(document)
-            or set(document) - {'schema_version', 'default_agent', 'agents', 'roles', 'cells'}
+            or set(document) - {'schema_version', 'default_agent', 'agents', 'roles', 'cells', 'planning', 'recovery'}
             or type(document['schema_version']) is not int or document['schema_version'] != 1
             or not isinstance(document['agents'], dict) or not 1 <= len(document['agents']) <= 32):
         raise HornetError('hive.json requires schema_version 1, default_agent and 1-32 named agents')
@@ -103,6 +103,12 @@ def validate(document):
                 raise HornetError('Unknown hive role: ' + target)
             if label(name) not in value['agents']:
                 raise HornetError('Hive assignment names an unknown agent: ' + name)
+    if 'planning' in value:
+        from .coding import planning
+        value['planning'] = planning.policy(value['planning'], value['agents'])
+    if 'recovery' in value:
+        from .coding import recovery
+        value['recovery'] = recovery.policy(value['recovery'], value['agents'])
     if len(json.dumps(value)) > 65536:
         raise HornetError('Hive configuration exceeds 64 KiB')
     return value

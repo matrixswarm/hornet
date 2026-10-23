@@ -180,6 +180,12 @@ class ReturnManifestTests(unittest.TestCase):
         self.finish()
         state = self.state()
         state.update(schema_version=1, phase='final_checks')
+        # This fixture emulates a pre-policy checkpoint, not a completed new
+        # goal whose bound closeout files were altered behind its controller.
+        for key in ('plan_policy', 'planning', 'recovery_policy', 'contract_format'):
+            state.pop(key, None)
+        for name in ('plan-policy.json', 'recovery-policy.json', 'contract-format.json', 'closeout.json', 'closeout-ready.json'):
+            (self.run_dir() / name).unlink(missing_ok=True)
         record = state['cells']['check-even']
         del record['return_manifest']
         del record['initial_snapshot']

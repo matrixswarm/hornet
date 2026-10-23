@@ -1,7 +1,8 @@
 # Publishing the signed public beta
 
 The `Publish signed Hornet release` workflow uploads the exact wheel and source
-distribution from the signed v0.15.1 GitHub release. It does not rebuild them.
+distribution from the signed GitHub release named by its verifier pins. It does
+not rebuild them.
 The release signature, manifest, package hashes and source commit are pinned in
 `scripts/publish_release.py`. A new version requires reviewed updates to those pins.
 
@@ -63,6 +64,6 @@ added afterward. These installation checks did not run a new live-model trial.
 The signing key authenticates the GitHub release bytes. PyPI's publisher
 attestations identify the GitHub workflow that uploaded those same bytes.
 
-Do not overwrite the signed release or move the v0.15.1 tag to publish these
-workflow changes. The publishing workflow is maintained on `main` independently
-of the frozen package source commit.
+Do not overwrite a signed release or move an existing tag. The publishing
+workflow is maintained on `main` independently of the frozen package source
+commit.

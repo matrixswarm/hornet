@@ -25,7 +25,7 @@ configure a worker VM and connect your local model for coding goals.
 
 ## Try one completed goal
 
-1. Open the [v0.15.1 release](https://github.com/matrixswarm/hornet/releases/tag/v0.15.1).
+1. Open the [v0.16.0 release](https://github.com/matrixswarm/hornet/releases/tag/v0.16.0).
 2. Download the **starter ZIP**, `SHA256SUMS`, `SHA256SUMS.asc`, the public signing
    key and `VERIFY-RELEASE.md`.
 3. Verify the download, extract it, and follow **START-HERE.md** inside.
@@ -57,11 +57,11 @@ checks is evidence of the checked behavior, and exported code still needs review
 
 ## Named agents
 
-The development source supports a project-root `hive.json` mapping labels to
+Hornet supports a project-root `hive.json` mapping labels to
 model connections. Run `hornet hive init`, select `--agent gemma`, or assign an
 unfinished goal cell with `hornet hive assign RUN CELL --agent qwen`.
 See [the hive guide](docs/HIVE.md) for role routing, shared resource claims and
-resume. This feature is being developed after the published 0.15.1 package.
+resume. Named agents are available in 0.16.0 and later.
 
 ## Questions wait for you
 
@@ -108,7 +108,7 @@ On Linux/macOS:
 .venv/bin/hornet --version
 ```
 
-The PyPI 0.15.1 wheel and source distribution match the files in the signed
+The PyPI 0.16.0 wheel and source distribution match the files in the signed
 GitHub release. See the [CLI reference](https://github.com/matrixswarm/hornet/blob/main/docs/CLI.md)
 for goals, revisions, contracts and recovery commands.
 
@@ -126,3 +126,17 @@ Copyright (c) 2026 Daniel F. MacDonald. Licensed under **AGPL-3.0-only**;
 see [LICENSE](https://github.com/matrixswarm/hornet/blob/main/LICENSE).
 
 **Victory Always.**
+
+
+### Hive terminal
+
+Run `hornet hive terminal` from the project root to browse saved goals, all
+cells and active cells. Select a cell to see its inverted tree, agent, observed
+checks and time since the last recorded action. Named connections may use local
+or compatible remote model servers. See [Hive connections](docs/HIVE.md) and the
+[terminal guide](docs/HIVE-TERMINAL.md). These features are available in 0.16.0.
+
+The [goal controller](docs/GOAL-CONTROLLER.md) adds optional root-plan
+approval by a user or named supervisor, bounded recovery for repeated cell
+operations, and a closeout receipt after the controller releases its leases.
+Drafts, rejected attempts and frozen checks stay available across resumes.

@@ -85,11 +85,12 @@ class LMStudioJsonTests(unittest.TestCase):
         return {'model': 'fixture', 'choices': [{'message': {'content': content or '{"action":"finish","summary":"Done"}'}, 'finish_reason': finish}],
                 'usage': {'completion_tokens': tokens, 'completion_tokens_details': {'reasoning_tokens': reasoning}}}
 
-    def request(self, body, messages=None, max_tokens=128):
+    def request(self, body, messages=None, max_tokens=128, offered=None):
         opener = MagicMock()
         opener.open.return_value.__enter__.return_value.read.return_value = json.dumps(body).encode()
         with patch('hornet.coding.model.request.build_opener', return_value=opener):
-            result = lmstudio_json(messages or [{'role': 'user', 'content': 'small ticket'}], TOOLS[:2],
+            result = lmstudio_json(messages or [{'role': 'user', 'content': 'small ticket'}],
+                                   TOOLS[:2] if offered is None else offered,
                                    'fixture', 'http://127.0.0.1:1234/v1', max_tokens, 60)
         return result, opener.open.call_args[0][0]
 
@@ -102,6 +103,22 @@ class LMStudioJsonTests(unittest.TestCase):
         self.assertNotIn('tools', payload)
         self.assertNotIn('temperature', payload)
         self.assertEqual(stats['usage']['completion_tokens_details']['reasoning_tokens'], 0)
+
+    def test_finish_is_offered_only_to_roles_without_required_submissions(self):
+        schema = DOCUMENTS['submit_advice']
+        offered = [tool('submit_advice', 'Submit advice', schema['properties'], schema['required'])]
+        content = json.dumps({'action': 'call', 'name': 'submit_advice', 'arguments': {'message': 'Use integer arithmetic'}})
+        _, req = self.request(self.response(content), offered=offered)
+        payload = json.loads(req.data)
+        alternatives = payload['response_format']['json_schema']['schema']['anyOf']
+        self.assertEqual([row['properties']['action']['const'] for row in alternatives], ['call'])
+        self.assertIn('Complete this role by calling its offered submit tool', payload['messages'][0]['content'])
+        self.assertNotIn('To finish:', payload['messages'][0]['content'])
+        _, req = self.request(self.response())
+        payload = json.loads(req.data)
+        alternatives = payload['response_format']['json_schema']['schema']['anyOf']
+        self.assertIn('finish', [row['properties']['action']['const'] for row in alternatives])
+        self.assertIn('To finish:', payload['messages'][0]['content'])
 
     def test_history_keeps_raw_source_and_omits_opaque_reasoning(self):
         source = '1: print("quoted", "\\n")\n'

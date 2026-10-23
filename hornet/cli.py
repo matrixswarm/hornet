@@ -111,9 +111,13 @@ def build_parser():
         common(auto)
         if name == 'revise':
             auto.add_argument('run', help='Completed parent goal directory')
-            auto.add_argument('--file', dest='files', action='append', required=True, help='Target relative file; repeat for up to four')
+            target = auto.add_mutually_exclusive_group(required=True)
+            target.add_argument('--file', dest='files', action='append', help='Target relative file; repeat for up to four')
+            target.add_argument('--cell', help='Verified parent cell ID; copy its files into a linked revision goal')
         else:
             auto.add_argument('--worker-config', required=True)
+            auto.add_argument('--scope-file', dest='scope_files', action='append',
+                              help='Exact production file for this goal; repeat for each file')
         goal = auto.add_mutually_exclusive_group(required=True)
         goal.add_argument('--goal')
         goal.add_argument('--goal-file')
@@ -123,11 +127,15 @@ def build_parser():
         auto.add_argument('--protocol', choices=('native', 'lmstudio-json'), default='lmstudio-json')
         auto.add_argument('--max-tokens', type=int, default=3072)
         auto.add_argument('--timeout', type=int, default=120)
-        auto.add_argument('--max-turns', type=int, default=30, help='Total model turns shared across all roles and cells')
+        auto.add_argument('--max-turns', type=int, default=30, help='Total model turns shared across all roles and cells (maximum 60)')
         auto.add_argument('--max-tools', type=int, default=80, help='Total model tool operations across the recipe')
         auto.add_argument('--max-repairs', type=int, default=2)
         auto.add_argument('--context-chars', type=int, default=16000)
         auto.add_argument('--max-cells', type=int, default=3)
+        auto.add_argument('--plan-mode', choices=('auto', 'review'), help='Execute the validated root plan automatically, or wait for approval')
+        auto.add_argument('--approver', help='user or a named hive supervisor; implies review unless --plan-mode is provided')
+        auto.add_argument('--max-handoffs', type=int, choices=(0, 1, 2), help='Bounded fresh-context retries per stuck cell (default: 1)')
+        auto.add_argument('--recovery-agent', dest='recovery_agents', action='append', help='Named hive fallback; repeat for an ordered list')
         auto.add_argument('--recon-tree', action='store_true', help='Read-only recon, depth-2 child work and bounded recent context')
         auto.add_argument('--research-cells', action='store_true', help='Allow cited read-only research branches feeding coding cells; implies recon-tree')
         auto.add_argument('--cell-turns', type=int, default=10)
@@ -148,11 +156,21 @@ def build_parser():
     hive_commands = hive.add_subparsers(dest='hive_action', required=True)
     common(hive_commands.add_parser('init', help='Create an editable hive.json without overwriting an existing one'))
     common(hive_commands.add_parser('list', help='Validate and list configured agents without model requests'))
+    terminal = hive_commands.add_parser('terminal', help='Live read-only command center for saved goals and cells')
+    common(terminal)
+    terminal.add_argument('--run', help='Show one exact run directory inside this project')
+    terminal.add_argument('--run-dir', default='coding', help='Search below this project directory (default: coding)')
+    terminal.add_argument('--once', action='store_true', help='Print one snapshot without opening a live screen')
+    terminal.add_argument('--interval', type=float, default=1.0, help='Refresh seconds, 0.25-60 (default: 1)')
     assign = hive_commands.add_parser('assign', help='Assign an unfinished cell at its next model request')
     common(assign)
     assign.add_argument('run', help='Exact autonomous goal run directory')
     assign.add_argument('cell', help='Exact cell ID from that goal')
     assign.add_argument('--agent', required=True, help='Label from the goal\'s saved hive')
+    resume_cell = hive_commands.add_parser('resume-cell', help='Resume the exact selected unfinished cell from its saved boundary')
+    common(resume_cell)
+    resume_cell.add_argument('run', help='Exact autonomous goal run directory')
+    resume_cell.add_argument('cell', help='Exact active cell ID from that goal')
     control = commands.add_parser('control', help='Queue file-based operator steering for an autonomous recipe')
     common(control)
     control.add_argument('run')
@@ -161,6 +179,18 @@ def build_parser():
     action.add_argument('--continue', dest='continue_run', action='store_true')
     action.add_argument('--stop', action='store_true')
     action.add_argument('--message')
+
+    plan = commands.add_parser('plan', help='Inspect or decide a saved root-plan revision without connecting a model or worker')
+    common(plan)
+    plan_commands = plan.add_subparsers(dest='plan_action', required=True)
+    for name in ('show', 'approve', 'revise'):
+        action = plan_commands.add_parser(name)
+        common(action)
+        action.add_argument('run', help='Exact autonomous goal run directory')
+        if name != 'show':
+            action.add_argument('--revision', type=int, required=True)
+        if name == 'revise':
+            action.add_argument('--feedback', required=True)
 
     questions = commands.add_parser('questions', help='Show saved questions and answers; no model or worker connection')
     common(questions)
@@ -182,6 +212,13 @@ def build_parser():
 def render(args, result):
     if args.json:
         print(json.dumps(result, ensure_ascii=False, indent=2))
+    elif result.get('status') == 'waiting_for_plan_approval':
+        print(result['message'])
+        print('Draft: ' + result['draft'])
+        print('hornet plan show "{}"'.format(result['run_dir']))
+        print('hornet plan approve "{}" --revision {}'.format(result['run_dir'], result['revision']))
+        print('hornet plan revise "{}" --revision {} --feedback "REQUESTED CHANGES"'.format(result['run_dir'], result['revision']))
+        print('Then: hornet autoresume "{}"'.format(result['run_dir']))
     elif result.get('status') in {'waiting_for_user', 'question_cancelled'}:
         print('Waiting for you' if result['status'] == 'waiting_for_user' else 'Question cancelled; work remains stopped')
         print(result['question'])
@@ -241,7 +278,11 @@ def render(args, result):
             print(result["error"])
         for path in result.get("changed_files", []):
             print("  " + path)
-    elif args.command in {'autowork', 'autoresume', 'control', 'revise', 'goals', 'goal-files', 'hive'}:
+    elif args.command == 'hive' and args.hive_action == 'terminal':
+        if not result.get('terminal_closed'):
+            from .hive_terminal import render_snapshot
+            render_snapshot(result)
+    elif args.command in {'autowork', 'autoresume', 'control', 'revise', 'goals', 'goal-files', 'hive', 'plan'}:
         print(json.dumps(result, ensure_ascii=False, indent=2))
     elif args.command == "init":
         print("Project: {}\nCreated {} files; preserved {} existing files.".format(result["root"], len(result["created"]), len(result["preserved"])))

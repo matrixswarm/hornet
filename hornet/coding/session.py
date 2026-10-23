@@ -38,9 +38,9 @@ def snapshot(worker):
 
 
 def ready(worker):
-    value = worker.call("status")
+    value = worker.preflight() if callable(getattr(type(worker), 'preflight', None)) else worker.call("status")
     if not value.get("ok") or not value.get("ready") or value.get("platform") != "linux" or value.get("uid") in {None, 0}:
-        raise HornetError("Worker must be ready in the dedicated Linux VM under a non-root account")
+        raise HornetError(value.get('error') or "Worker must be ready in the dedicated Linux VM under a non-root account")
 
 
 def settings(args, project=None, *, max_turns_cap=30):

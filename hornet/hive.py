@@ -81,6 +81,8 @@ def validate(document):
     value = copy.deepcopy(document)
     for name, profile in value['agents'].items():
         label(name)
+        if isinstance(profile, dict) and 'api_key' in profile:
+            raise HornetError('Hive agent ' + name + ' contains api_key; remove that field and use the HORNET_API_KEY environment variable')
         if (not isinstance(profile, dict) or not {'model', 'base_url', 'protocol'} <= set(profile)
                 or set(profile) - {'model', 'base_url', 'protocol', 'resource'}
                 or not isinstance(profile['model'], str) or not 1 <= len(profile['model'].strip()) <= 256

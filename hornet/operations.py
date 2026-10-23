@@ -84,7 +84,7 @@ def execute(args):
         return questions.respond(project, args.run, args.question_id, text, cancel=args.cancel is not None)
     if args.command == "worker-status":
         from .coding.transport import SSHWorker
-        return SSHWorker(project.path(args.worker_config)).call("status")
+        return SSHWorker(project.path(args.worker_config)).preflight()
     if args.command == "work":
         from .coding.agent import work
         return work(project, args)

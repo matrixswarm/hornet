@@ -1,33 +1,69 @@
-# Hornet 0.16.0 — your first completed goal
+# Hornet 0.16.1 — first coding goal
 
 Give a local model a small coding goal. Hornet keeps the work, checks and recovery
 state in a separate goal directory, then exports the result for your review.
 
-The downloadable starter kit includes the 0.16.0 wheel, its matching source, a small
+The starter kit includes the 0.16.1 wheel, its matching source, a small
 Python exercise and a setup tool for a **new dedicated Ubuntu VM**. Start with the
 installation check, then complete the coding exercise. The Windows walkthrough
-uses Python 3.9+, OpenSSH and VirtualBox. The model runs on your Windows host.
+uses Python 3.9+, OpenSSH and VirtualBox. Linux commands are included below and in
+WORKER-SETUP.md. The model runs on your host.
+
+Verify the downloaded starter ZIP against the signed release manifest before
+running its tools. Follow [VERIFY-RELEASE.md](VERIFY-RELEASE.md).
+
+## Linux: one setup command
+
+On the Ubuntu host, install VirtualBox, the OpenSSH client and Python's `venv`
+support first. Load your model in LM Studio and start its server. Extract this
+starter kit to a new folder and open a terminal in that folder. Run as your normal
+account, without `sudo`:
+
+```bash
+python3 tools/start_linux.py --download-image --model 'google/gemma-4-12b' --run-demo
+```
+
+Use the exact model ID from your LM Studio server. This downloads the pinned
+Ubuntu cloud image (about 678 MiB), verifies its SHA-256, installs the bundled
+wheel and setup dependency into `.venv`, creates `my-first-goal`, and starts
+a new VM named `hornet-first-goal` on loopback port 2224. It waits for the full
+worker preflight before sending the demo. To check setup without inference, omit
+`--run-demo`. If LM Studio authentication is enabled, set `HORNET_API_KEY` in this
+terminal's environment first; keep its value out of files and chat.
+
+An existing VM/project is retained and refused. Choose another unused `--name`
+and `--port`, in a fresh extracted kit, for another trial. Setup saves its status
+probes in `setup-probes/` and the later demo command in `demo-command.txt`.
+The autonomous demo must report `completed`; process exit alone is not success.
+The source and installed-package checks are described in `VALIDATION.json`.
 
 ## 1. Verify and install
 
-Verify the ZIP before extracting it using `VERIFY-RELEASE.md`, supplied beside
-the ZIP. Open PowerShell in the extracted starter folder. Commands use the
+For the manual Windows path, open PowerShell in the verified extracted starter folder. Commands use the
 environment's executable directly; activating scripts is unnecessary.
 
 ```powershell
 py -3 -m venv .venv
-.\.venv\Scripts\python.exe -m pip install --no-index --no-deps .\matrixswarm_hornet-0.16.0-py3-none-any.whl
+.\.venv\Scripts\python.exe -m pip install --no-index --no-deps .\matrixswarm_hornet-0.16.1-py3-none-any.whl
 .\.venv\Scripts\hornet.exe --version
 .\.venv\Scripts\python.exe .\tools\first_run.py --project .\my-first-goal
 ```
 
-Expected: `matrixswarm-hornet 0.16.0`, followed by `INSTALLATION CHECK PASSED`.
+Expected: `matrixswarm-hornet 0.16.1`, followed by `INSTALLATION CHECK PASSED`.
 The check initializes a new project, runs local diagnostics, and verifies a
 small file contract. It does not contact a model. It refuses to overwrite a
 project, so choose another name for a second trial.
 
-On Linux/macOS the equivalent environment executables are `.venv/bin/python`
-and `.venv/bin/hornet`. VM provisioning below is currently Windows/VirtualBox.
+For manual Linux setup, start in a fresh extracted starter folder. Skip this if
+you already used the one-command launcher above:
+
+```bash
+python3 -m venv .venv
+.venv/bin/python -m pip install --no-index --no-deps ./matrixswarm_hornet-0.16.1-py3-none-any.whl
+.venv/bin/python tools/first_run.py --project ./my-first-goal
+```
+
+Complete the Linux steps in WORKER-SETUP.md before sending a coding goal.
 
 ## 2. Prepare the coding worker
 

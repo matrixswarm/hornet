@@ -1,4 +1,4 @@
-"""Create a fresh Windows VirtualBox demo worker; never adopt an existing VM."""
+"""Create a fresh Windows or Linux VirtualBox demo worker; never adopt an existing VM."""
 import argparse
 import base64
 import hashlib
@@ -7,8 +7,10 @@ import json
 import os
 from pathlib import Path
 import re
+import shutil
 import socket
 import subprocess
+import sys
 import uuid
 import zipfile
 
@@ -29,6 +31,46 @@ def sha256(path):
     return digest.hexdigest()
 
 
+def host_tools(vbox=None, platform=None):
+    platform = sys.platform if platform is None else platform
+    if platform == 'win32':
+        sshkey = Path(os.environ.get('SystemRoot', 'C:/Windows')) / 'System32/OpenSSH/ssh-keygen.exe'
+        virtualbox = Path(vbox) if vbox else Path('C:/Program Files/Oracle/VirtualBox/VBoxManage.exe')
+        windows = True
+    elif platform.startswith('linux'):
+        sshkey = Path(shutil.which('ssh-keygen') or '/nonexistent/ssh-keygen')
+        virtualbox = Path(vbox) if vbox else Path(shutil.which('VBoxManage') or '/nonexistent/VBoxManage')
+        windows = False
+    else:
+        raise ValueError('This provisioning helper supports Windows and Linux hosts')
+    if not sshkey.is_file() or not virtualbox.is_file():
+        raise ValueError('Install the OpenSSH client and VirtualBox on this host; --vbox can select VBoxManage')
+    return sshkey, virtualbox, windows
+
+
+def restrict_private(directory, windows):
+    if windows:
+        account = run(['whoami']).strip()
+        run(['icacls.exe', directory, '/inheritance:r', '/grant:r', account + ':(OI)(CI)F'])
+    else:
+        directory.chmod(0o700)
+
+
+def clone_image(vbox, image, vm_dir, expected_hash):
+    # VirtualBox may assign a UUID to its input VMDK. Never register or mutate
+    # the user's verified download; only a newly created private staging copy.
+    staged = vm_dir / 'source-image.vmdk'
+    with image.open('rb') as source, staged.open('xb') as destination:
+        shutil.copyfileobj(source, destination, length=1024 * 1024)
+    if sha256(staged) != expected_hash:
+        raise RuntimeError('Image changed during copy; staged image retained for inspection')
+    disk = vm_dir / 'worker.vdi'
+    run([vbox, 'clonemedium', 'disk', staged, disk, '--format', 'VDI'], timeout=300)
+    run([vbox, 'closemedium', 'disk', staged])
+    staged.unlink()  # Only our new, successfully unregistered staging file.
+    return disk
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--project', required=True, type=Path)
@@ -38,10 +80,12 @@ def main():
     parser.add_argument('--name', default='hornet-first-goal')
     parser.add_argument('--port', type=int, default=2224)
     parser.add_argument('--memory', type=int, default=2048)
-    parser.add_argument('--vbox', type=Path, default=Path('C:/Program Files/Oracle/VirtualBox/VBoxManage.exe'))
+    parser.add_argument('--vbox', type=Path, help='VBoxManage path; detected automatically on Windows/Linux')
     args = parser.parse_args()
-    if os.name != 'nt':
-        parser.error('This provisioning helper currently supports Windows only')
+    try:
+        sshkey, args.vbox, windows = host_tools(args.vbox)
+    except ValueError as exc:
+        parser.error(str(exc))
     if not re.fullmatch(r'[a-z][a-z0-9-]{2,40}', args.name):
         parser.error('Use a short lowercase VM name containing letters, digits or hyphens')
     if not 1024 <= args.port <= 65535 or not 1024 <= args.memory <= 8192:
@@ -58,13 +102,10 @@ def main():
     vm_parent = args.vm_parent.resolve()
     private = project / 'private'
     config_path = project / 'worker.json'
-    sshkey = Path(os.environ['SystemRoot']) / 'System32/OpenSSH/ssh-keygen.exe'
     if not (project / '.hornet.json').is_file():
         parser.error('Run first_run.py to create the project first')
     if config_path.exists() or private.exists() or (vm_parent / args.name).exists():
         parser.error('Worker files or VM directory already exist; preserve them and use a new project/name')
-    if not sshkey.is_file() or not args.vbox.is_file():
-        parser.error('Install Windows OpenSSH and VirtualBox before preparing the worker')
     if ('"' + args.name + '"') in run([args.vbox, 'list', 'vms']):
         parser.error('VM name is already registered; choose a new name')
     with socket.socket() as probe:
@@ -75,8 +116,7 @@ def main():
     source = kit / 'examples/demo-source'
     assert worker_source.is_file() and (source / 'calculator.py').is_file()
     private.mkdir(mode=0o700)
-    account = run(['whoami']).strip()
-    run(['icacls.exe', private, '/inheritance:r', '/grant:r', account + ':(OI)(CI)F'])
+    restrict_private(private, windows)
     identity = private / 'worker_ed25519'
     hostkey = private / 'host_ed25519'
     for key in (identity, hostkey):
@@ -141,11 +181,14 @@ subprocess.run(['systemctl','enable','--now','ssh'],check=True)
     iso.add_fp(io.BytesIO(metadata), len(metadata), iso_path='/METADATA.;1', rr_name='meta-data', joliet_path='/meta-data')
     iso.write(str(seed))
     iso.close()
+    if not windows:
+        for private_file in private.iterdir():
+            if private_file.is_file():
+                private_file.chmod(0o600)
     vm_parent.mkdir(parents=True, exist_ok=True)
     run([args.vbox, 'createvm', '--name', args.name, '--ostype', 'Ubuntu_64', '--basefolder', vm_parent, '--register'])
     vm_dir = vm_parent / args.name
-    disk = vm_dir / 'worker.vdi'
-    run([args.vbox, 'clonemedium', 'disk', image, disk, '--format', 'VDI'], timeout=300)
+    disk = clone_image(args.vbox, image, vm_dir, args.image_sha256.lower())
     run([args.vbox, 'modifymedium', 'disk', disk, '--resize', '16384'])
     run([args.vbox, 'modifyvm', args.name, '--memory', args.memory, '--cpus', '1', '--ioapic', 'on', '--vram', '16',
          '--boot1', 'disk', '--boot2', 'dvd', '--boot3', 'none', '--boot4', 'none', '--nic1', 'nat',

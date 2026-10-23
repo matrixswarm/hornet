@@ -1,5 +1,28 @@
 # Validation scope
 
+## 0.16.1 setup and contract-review maintenance
+
+This release adds Linux host setup, verifies the actual worker deployment before
+coding, and separates planning review from acceptance-check review. Regression
+checks cover malformed deployments, retained setup attempts, protected source
+images, exact literal returns, incomplete acceptance checks and review-version
+changes across resume.
+
+In the October 23 pre-release trial after the review fix, Gemma 12B completed the
+calculator goal in 14 model requests and 4 worker tool calls. Peak prompt usage
+was 3,438 tokens. Independent checks passed inputs -3, 0, 7, -100 and 101; only
+`calculator.py` changed and the original worker baseline was preserved. This
+trial used Windows with a fresh Ubuntu VM and the local preview source.
+
+The release's `VALIDATION.json` records the separate installed-candidate trial,
+final package hashes and exact source commit. Linux host orchestration is covered
+by simulated setup tests; the fresh release-candidate VM trial uses a Windows host.
+The earlier user-returned Ubuntu trial used an unsigned development preview.
+None of these focused trials establishes general model reliability.
+
+Upgrades do not migrate an existing VM or its runs. Keep the old environment,
+worker and evidence together and use the matching starter for a fresh deployment.
+
 ## 0.16.0 goal-controller iteration
 
 This release adds named model agents, a read-only hive terminal, exact cell

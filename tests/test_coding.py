@@ -83,8 +83,11 @@ class WorkerTests(unittest.TestCase):
         with patch('hornet.coding.worker.subprocess.Popen', return_value=child), \
                 patch('hornet.coding.worker.subprocess.run',
                       return_value=subprocess.CompletedProcess([], 1, b'fixture failure')):
-            with self.assertRaisesRegex(WorkerError, 'termination could not be confirmed'):
-                self.worker.run_command(['python3', '-c', 'import time; time.sleep(2)'], timeout=1)
+            result = self.worker.run_command(['python3', '-c', 'import time; time.sleep(2)'], timeout=1)
+        self.assertFalse(result['ok'])
+        self.assertTrue(result['timed_out'])
+        self.assertFalse(result['termination_confirmed'])
+        self.assertIn('termination could not be confirmed', result['error'])
         child.kill.assert_called_once_with()
 
 

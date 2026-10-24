@@ -10,6 +10,10 @@ check runs inside the execution lease. Watch mode prints changed observations;
 single scans support external scheduling. The hive terminal shows enrollment and
 activation counts. No OS scheduler is installed automatically.
 
+Timed-out commands on Windows terminate their process tree before returning,
+including interpreter children started by virtual-environment launchers. An
+unconfirmed termination reports an error; it cannot become a successful check.
+
 New goals independently derive each selected code call's expected return before
 freezing its schema. The derivation sees the requirements and call inputs, not
 the proposed schema or author rationale. The controller rejects incompatible

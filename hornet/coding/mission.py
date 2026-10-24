@@ -223,9 +223,11 @@ def binding(state, cell):
 def validate(run, state):
     if state['schema_version'] < 3:
         return
-    from . import contract_review, planning, recovery, contract_wire, file_scope
+    from . import contract_review, planning, recovery, contract_wire, file_scope, goal_contract, goal_repair
     planning.validate(run, state)
     file_scope.validate(run, state)
+    goal_contract.validate(run, state)
+    goal_repair.validate(run, state)
     recovery.validate(run, state)
     contract_wire.validate(run, state)
     contract_review.validate(run, state)
@@ -249,7 +251,11 @@ def validate(run, state):
         coverage(state['plan'], goal)
     if state.get('goal_checks') is not None:
         allowed = [path for cell in state['plan']['cells'] for path in cell['files']]
-        behavioral_checks(state['goal_checks'], allowed)
+        if state.get('operator_acceptance'):
+            goal_contract.validate_checks(state['goal_checks'])
+            goal_contract.validate_paths(state['goal_checks'], allowed)
+        else:
+            behavioral_checks(state['goal_checks'], allowed)
         if (read(run / 'goal-acceptance.json') != state['goal_checks']
                 or acceptance.digest(state['goal_checks']) != state['goal_checks_sha256']):
             raise HornetError('Frozen goal checks changed')
@@ -272,8 +278,9 @@ def validate(run, state):
 
 
 def completion(run, state):
-    from . import tree, goals
+    from . import tree, goals, goal_contract
     goals.validate(run, state)
+    goal_contract.validate(run, state)
     evidence = state['goal_verification']
     path = run / evidence['path']
     report = read(path)
@@ -312,6 +319,13 @@ def completion(run, state):
         value['tree_limits'] = state['tree_limits']
     if state.get('workspace_record'):
         value['workspace'] = state['workspace_record']
+    if state.get('operator_acceptance'):
+        value['operator_acceptance'] = state['operator_acceptance']
+    if state.get('goal_repair_policy'):
+        from . import goal_repair
+        goal_repair.validate(run, state)
+        value['goal_repair_policy'] = state['goal_repair_policy']
+        value['goal_repairs'] = [record['completion'] for record in state['goal_repairs']]
     if state.get('revision'):
         value['revision'] = goals.regression_evidence(run, state)
     if state.get('contract_policy'):
@@ -344,6 +358,11 @@ def status(state):
             'active_error': state.get('active_error'),
             'cell_errors': {key: record['active_error'] for key, record in state['cells'].items() if record.get('active_error')},
             'last_outcome': state.get('last_outcome'), 'usage': usage(state)}
+    if state.get('goal_repair_policy'):
+        value['goal_repairs'] = {'started': len(state['goal_repairs']),
+            'completed': sum('completion' in record for record in state['goal_repairs']),
+            'active': state.get('active_goal_repair'),
+            'cell': state.get('active_cell') if state.get('active_goal_repair') else None}
     if state['schema_version'] >= 4:
         from . import intake
         value['intake'] = intake.summary(state)

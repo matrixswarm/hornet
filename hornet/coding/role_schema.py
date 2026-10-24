@@ -70,6 +70,13 @@ def oracle_schema(packet):
     rows = schema['properties']['expectations']
     rows.update(minItems=len(packet['calls']), maxItems=len(packet['calls']))
     rows['items']['properties']['id']['enum'] = [c['id'] for c in packet['calls']]
+    if packet.get('kind') == 'plan_returns_v1':
+        fields = rows['items']['properties']
+        fields['status']['enum'] = ['determined', 'type_only', 'uncertain']
+        fields['return_type'] = {'anyOf': [
+            {'type': 'string', 'enum': ['boolean', 'integer', 'number', 'string', 'null', 'array', 'object']},
+            {'type': 'null'}]}
+        rows['items']['required'].append('return_type')
     return schema
 
 

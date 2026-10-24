@@ -19,7 +19,7 @@ import uuid
 from urllib import request
 
 
-VERSION = '0.16.1'
+VERSION = '0.17.0'
 # Ubuntu's dated SHA256SUMS lists this exact image; also used by the Windows first-user trial.
 CLOUD_URL = 'https://cloud-images.ubuntu.com/jammy/20261020/jammy-server-cloudimg-amd64.vmdk'
 CLOUD_SHA256 = 'eac978cac67cc40afe3785c4d78c97c77a36b16b4db57ae893a69f62de7736b2'

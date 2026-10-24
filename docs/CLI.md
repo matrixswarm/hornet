@@ -802,6 +802,23 @@ of semantic correctness or an independent model ensemble. It can make mistakes.
 Literal anchors, executable checks and independent release oracles provide
 different evidence; none establishes correctness for every possible input.
 
+## Supplied goal checks (unreleased)
+
+`autowork --max-goal-repairs 0|1|2` and `revise --max-goal-repairs 0|1|2`
+freeze the number of automatic repair jobs for failed whole-goal or inherited
+regression checks. Default: 1; 0 disables dispatch. This differs from
+`--max-repairs`, which limits verification retries inside an individual job.
+Repairs require one unambiguous code-cell owner, retain all original criteria
+and published dependency values, and use the remaining shared goal budget.
+See [final goal repair](GOAL-CONTROLLER.md#repair-a-failed-final-goal-gate-unreleased).
+
+`autowork --acceptance-file checks.json` freezes caller-supplied final goal checks
+before planning. `revise --acceptance-file checks.json` adds criteria for a new
+revision while retaining the parent's regression checks. The file uses the
+standalone `work --acceptance-file` schema. See
+[the goal controller guide](GOAL-CONTROLLER.md#supplied-whole-goal-acceptance-checks-unreleased)
+for an example, evidence paths and recovery limits.
+
 ## Development checks
 
 ```console
@@ -814,3 +831,11 @@ historical boot recipes. Original `../hornet/` state and experiments in `bin/`
 are retained separately. This release implements the CLI workflows above;
 distributed swarm scheduling and automatic self-modification are separate work.
 The earlier stamped source archive remains the immutable pre-rewrite checkpoint.
+
+## Periodic supervision (0.17.0)
+
+`hive supervise` inspects autonomous goals without inference. Use `--run RUN --enable` to enroll one goal, `--dispatch` to allow one eligible activation,
+and `--watch --interval 180` to repeat. Enrollment freezes `--max-activations`
+(default 3) and `--cooldown` (default 180 seconds). `--disable` prevents future
+activations without clearing history. `--acknowledge N` records manual inspection
+of an interrupted supervisor attempt. See [SUPERVISOR.md](SUPERVISOR.md).

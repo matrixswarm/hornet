@@ -121,6 +121,11 @@ class View:
                           'Goal progress: {}/{} cells verified | requests {}/{} | tools {}/{}'.format(
                               goal['cells_verified'], goal['cells_total'], goal['model_requests'], goal['model_limit'], goal['tools_used'], goal['tool_limit'])]
                 lines += textwrap.wrap('Goal: ' + clean(goal['goal']), width)[:3]
+                if goal.get('supervisor'):
+                    watch = goal['supervisor']
+                    lines += ['Supervisor: ' + (watch['error'] if 'error' in watch else
+                        '{} | activations {}/{}{}'.format('enabled' if watch['enabled'] else 'disabled',
+                            watch['activations'], watch['limit'], ' | unresolved receipt' if watch['unresolved'] else ''))]
                 if goal.get('revision'):
                     origin = goal['revision']
                     lines += ['Revision of {} in {}'.format(origin['source_cell_id'] or '(file selection)',

@@ -142,7 +142,7 @@ def load(project, run):
         elif job['phase'] == 'waiting_for_user':
             raise ValueError('Missing waiting question')
         for item in job.get('answered_questions', []):
-            if questions.resolution(item['reference']) != item['answer']:
+            if questions.resolution(item['reference'], publish_missing=False) != item['answer']:
                 raise ValueError('Saved question answer changed')
         read_refs.observations(job)
         active = job.get('in_flight_operation')

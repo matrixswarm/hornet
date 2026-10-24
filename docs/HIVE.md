@@ -160,3 +160,10 @@ Browse all cells, active cells and goals. Select a cell for its inverted tree,
 agent assignment, observed progress and time since the last recorded agent
 action. The viewer makes no model or worker requests. See the
 [terminal guide](HIVE-TERMINAL.md) for keys, JSON snapshots and limits.
+
+## Periodic supervision
+
+Use `hornet hive supervise` for a read-only goal scan. Explicit enrollment and
+`--dispatch` allow bounded automatic resume; `--watch` repeats the scan without
+inference or repeated output when nothing changes. See the
+[supervisor guide](SUPERVISOR.md) for pause rules, limits and retained receipts.

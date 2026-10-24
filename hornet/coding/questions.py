@@ -98,8 +98,10 @@ def publish(reference):
     return record
 
 
-def resolution(reference):
-    record = publish(reference)
+def resolution(reference, *, publish_missing=True):
+    record = publish(reference) if publish_missing else checked(reference)
+    if not publish_missing and read(path_for(record, 'question.json')) != reference:
+        raise HornetError('Saved question changed; inspection is required')
     path = path_for(record, 'resolution.json')
     if not path.exists():
         return None
@@ -186,6 +188,11 @@ def pending(project, run):
                 job = load_job(project, child.parent)
                 if job.get('waiting_question'):
                     found.append(job['waiting_question'])
+        elif state['phase'] == 'goal_repair':
+            from . import goal_repair
+            job = goal_repair.checked_job(project, root, goal_repair.active(root, state)[1])
+            if job and job.get('waiting_question'):
+                found.append(job['waiting_question'])
     else:
         from .session import load
         state = load(project, root)

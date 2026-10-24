@@ -1,5 +1,37 @@
 # Changelog
 
+## 0.17.0 — 2026-10-24
+
+Opt-in periodic supervision resumes explicitly enrolled goals at validated
+boundaries. Scans use no model requests. Each activation has a retained receipt,
+frozen lifetime cap and cooldown; worker leases, pauses, human decisions,
+unknown operations and existing budgets remain authoritative. A second boundary
+check runs inside the execution lease. Watch mode prints changed observations;
+single scans support external scheduling. The hive terminal shows enrollment and
+activation counts. No OS scheduler is installed automatically.
+
+New goals independently derive each selected code call's expected return before
+freezing its schema. The derivation sees the requirements and call inputs, not
+the proposed schema or author rationale. The controller rejects incompatible
+types, nested values and enums, returns specific feedback within the existing
+budget, and retains rejected proposals. Uncertainty cannot become approval.
+Saved approvals require matching evidence on resume; older goals retain their
+original versioned review policy.
+
+Autonomous goals and revisions accept caller-supplied `--acceptance-file` checks.
+The controller freezes them before planning, uses them for the final goal gate,
+and records their provenance in completion evidence. Cell checks still run;
+successful cells cannot bypass a failed goal check. Resume uses the frozen copy,
+and revisions retain inherited regression checks alongside any new criteria.
+
+New goals can append a bounded repair job when a failed whole-goal or inherited
+regression check has one unambiguous code-cell owner. `--max-goal-repairs` defaults
+to 1 (0 disables, 2 allows two jobs). Original jobs, returns, checks and failures
+remain intact; repairs preserve published dependency values and consume the
+remaining shared budget. All final gates rerun before completion. Hive terminal,
+questions and exact-cell resume follow the active repair. Ambiguous ownership,
+unknown outcomes and exhausted budgets stay stopped for inspection.
+
 ## 0.16.1 — 2026-10-23
 
 The worker provisioning helper supports Linux hosts as well as Windows, with

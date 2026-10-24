@@ -63,7 +63,9 @@ class GoalTests(unittest.TestCase):
             packet = json.JSONDecoder().raw_decode(messages[1]['content'])[0]
             return call('submit_contract_oracle', {'expectations': [dict(id=c['id'], status='determined',
                 basis='Apply the required multiplier.', value_json=json.dumps(c['args'][0] *
-                    (3 if c['function'].endswith('.triple') else 2))) for c in packet['calls']]}, 'oracle'), {}
+                    (3 if c['function'].endswith('.triple') else 2)),
+                **({'return_type': 'integer'} if packet.get('kind') == 'plan_returns_v1' else {}))
+                for c in packet['calls']]}, 'oracle'), {}
         if 'submit_contract_review' in names:
             return call('submit_contract_review', {'decision': 'approve', 'issues': [],
                 'rationale': 'Fixture contract matches the scoped task.'}, 'review'), {}

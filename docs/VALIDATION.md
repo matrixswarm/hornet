@@ -1,5 +1,30 @@
 # Validation scope
 
+## 0.17.0 supervision and contract hardening
+
+The supervisor's regression cases cover enrollment, activation caps and cooldowns,
+unchanged observations, real OS lock contention, active worker leases, retained
+crash receipts, pause/continue/stop, exact question and plan decisions, source
+changes, unknown operations, and a pause arriving between scan and dispatch.
+Scans validate saved evidence without model requests or publishing missing files.
+The release manifest records the exact final package, suite and installation checks.
+
+In the October 24 development trial, a fixture created a single defective cell
+and deliberately interrupted the first repair model request before any repair
+tool ran. The supervisor withheld dispatch while paused, then resumed the existing
+repair after an explicit continue. Gemma 12B completed the repair in four actual
+model requests, with peak prompt usage of 3,681 tokens. All 247 additional checks
+passed. Only `calculator.py` changed; the original cell history, failure report,
+published return value and baseline remained intact. Two subsequent dispatch scans
+did not restart the completed goal. Planning and initial defect creation in this
+trial were deterministic fixtures; they were not Gemma-generated work.
+
+Independent return-contract derivation, caller-frozen goal checks and bounded
+final-gate repair have separate regression coverage and earlier local trials.
+These focused results do not establish general model reliability or zero defects.
+Execution remains sequential. The supervisor does not resolve ambiguous worker
+operations, control a fleet of remote controllers or install an OS scheduler.
+
 ## 0.16.1 setup and contract-review maintenance
 
 This release adds Linux host setup, verifies the actual worker deployment before

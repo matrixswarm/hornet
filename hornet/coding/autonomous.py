@@ -7,7 +7,7 @@ from types import SimpleNamespace
 
 from hornet.project import HornetError, write_text
 from hornet import hive
-from . import acceptance, cells, session, returns, mission, intake, tree, research, workspaces, goals, contract_review, questions, activity, planning, recovery, closeout, contract_wire, file_scope
+from . import acceptance, cells, session, returns, mission, intake, tree, research, workspaces, goals, contract_review, questions, activity, planning, recovery, closeout, contract_wire, file_scope, goal_contract, goal_repair
 from .agent import TOOLS, tool
 from .context import focus_messages, history_chars
 from .control import Channel, PeerInbox, StopRequested
@@ -78,7 +78,9 @@ def start(project, args, worker=None, request_model=None):
     config = session.settings(args, project, max_turns_cap=60)
     plan_policy = planning.configure(args, config)
     recovery_policy = recovery.configure(args, config)
+    goal_repair_policy = goal_repair.configure(args)
     scope_policy = file_scope.configure(getattr(args, 'scope_files', None))
+    supplied_checks = goal_contract.configure(project, getattr(args, 'acceptance_file', None), scope_policy)
     goal = args.goal or project.path(args.goal_file).read_text(encoding='utf-8-sig')
     if not isinstance(goal, str) or not 1 <= len(goal.strip()) <= 12000:
         raise HornetError('Recipe goal requires 1-12000 characters')
@@ -126,8 +128,10 @@ def start(project, args, worker=None, request_model=None):
         mission.immutable(run / 'goal.json', mission.document(goal))
         planning.initialize(run, state, plan_policy)
         recovery.initialize(run, state, recovery_policy)
+        goal_repair.initialize(run, state, goal_repair_policy)
         contract_wire.initialize(run, state)
         file_scope.initialize(run, state, scope_policy)
+        goal_contract.initialize(run, state, supplied_checks)
         if getattr(args, 'contract_review', True):
             contract_review.initialize(run, state)
         stored(run / 'goal-status.json', mission.status(state))
@@ -143,7 +147,7 @@ def load(project, run):
     try:
         state = read_json(run / 'recipe-checkpoint.json')
         if (type(state['schema_version']) is not int or state['schema_version'] not in {1, 2, 3, 4, 5, 6} or state['project_root'] != str(project.root)
-                or state['run_dir'] != str(run) or state['phase'] not in {'intake', 'plan', 'goal_checks', 'checker', 'cell_running', 'final_checks', 'complete'}
+                or state['run_dir'] != str(run) or state['phase'] not in {'intake', 'plan', 'goal_checks', 'checker', 'cell_running', 'goal_repair', 'final_checks', 'complete'}
                 or state['schema_version'] < 4 and state['phase'] == 'intake'
                 or not isinstance(state['goal'], str) or not 1 <= len(state['goal']) <= 12000):
             raise ValueError('Invalid recipe checkpoint')
@@ -181,14 +185,14 @@ def load(project, run):
             if role.get('waiting_question'):
                 questions.validate_owner(role['waiting_question'], state, run)
             for item in role.get('answered_questions', []):
-                if questions.resolution(item['reference']) != item['answer']:
+                if questions.resolution(item['reference'], publish_missing=False) != item['answer']:
                     raise HornetError('Saved role answer changed')
         return state
     except (OSError, ValueError, KeyError, TypeError, AttributeError, StopIteration, HornetError):
         raise HornetError('Invalid autonomous recipe checkpoint or frozen contract') from None
 
 
-def resume(project, args, worker=None, request_model=None):
+def resume(project, args, worker=None, request_model=None, *, before_resume=None):
     run = project.path(args.run, write=True)
     state = load(project, run)
     if state['phase'] == 'complete' and (not state.get('plan_policy') or (run / 'closeout.json').exists()):
@@ -205,10 +209,14 @@ def resume(project, args, worker=None, request_model=None):
     worker = worker or SSHWorker(project.path(state['settings']['worker_config']), state['settings'].get('workspace'))
     with WorkerLock(workspaces.lock_path(project, state['settings'], worker), run), hive.worker_claim(candidate, worker, run):
         state = load(project, run)
+        # Automatic dispatch must recheck its observed boundary under the same
+        # worker lease as execution, before contacting the worker or model.
+        if before_resume is not None:
+            before_resume()
         hive.override(project, args, state['settings'])
         session.ready(worker)
         # A child job owns the exact source checkpoint while it is active.
-        if state['phase'] != 'cell_running' and session.snapshot(worker) != state['snapshot']:
+        if state['phase'] not in {'cell_running', 'goal_repair'} and session.snapshot(worker) != state['snapshot']:
             raise HornetError('Recipe resume refused: worker or source changed')
         if state.get('final_checks_in_flight'):
             raise HornetError('Recipe resume paused: final checks were in flight; their outcome is unknown')
@@ -278,6 +286,7 @@ def _execute(project, run, state, worker, request_model):
     def cell_task(cell):
         if state['schema_version'] >= 3:
             return ('Cell work packet (preserve every assigned requirement):\n' + acceptance.encoded(mission.packet(state, cell))
+                    + goal_contract.brief(run, state, cell['files'])
                     + ('\nThe assignment names this cell\'s implementation owner. A delegate owns only its cell; '
                        'self means the intake agent\'s own child, resumed in a fresh focused context. '
                        'Verifiers remain independent of the implementation owner.' if state['schema_version'] >= 4 else '') +
@@ -298,7 +307,8 @@ def _execute(project, run, state, worker, request_model):
         delay = channel.boundary(job)
         pause_seconds[0] += delay
         if job is not None:
-            state['cell_usage'][state['active_cell']] = job['tools_used']
+            offset = goal_repair.active(run, state)[1]['cell_tools_before'] if state['phase'] == 'goal_repair' else 0
+            state['cell_usage'][state['active_cell']] = offset + job['tools_used']
             ident = state['active_cell']
             address = 'verifier-' + ident
             questions = [item for item in state.get('peer_messages', [])
@@ -347,12 +357,12 @@ def _execute(project, run, state, worker, request_model):
                     'role': next((name for name in names if name.startswith('submit_')), state.get('active_cell', 'worker')),
                     'input_chars': history_chars(messages, offered), 'status': 'in_flight',
                     'prompt_tokens': None, 'output_tokens': None, 'started_at': session.now(),
-                    'cell': state.get('active_cell') if state['phase'] in {'checker', 'cell_running'} else None}
+                    'cell': state.get('active_cell') if state['phase'] in {'checker', 'cell_running', 'goal_repair'} else None}
                 if profile:
                     record.update(agent=profile['agent'], model=profile['model'])
                 state['request_records'].append(record)
             save()
-            activity_cell = state.get('active_cell') if state['phase'] in {'checker', 'cell_running'} else None
+            activity_cell = state.get('active_cell') if state['phase'] in {'checker', 'cell_running', 'goal_repair'} else None
             actor = {'agent': profile['agent'] if profile else None,
                      'model': profile['model'] if profile else config.model}
             activity.record(run, 'model_request', activity_cell, **actor)
@@ -537,7 +547,7 @@ def _execute(project, run, state, worker, request_model):
             if name not in {item['function']['name'] for item in offered}:
                 raise HornetError('Planning role requested an unoffered tool')
             actor = (state.get('request_records') or [{}])[-1]
-            activity.record(run, 'role_tool', state.get('active_cell') if state['phase'] in {'checker', 'cell_running'} else None,
+            activity.record(run, 'role_tool', state.get('active_cell') if state['phase'] in {'checker', 'cell_running', 'goal_repair'} else None,
                 agent=actor.get('agent'), model=actor.get('model', config.model), tool=name)
             arguments = {}
             if name != submit_name and tools_used() >= config.max_tools:
@@ -565,6 +575,7 @@ def _execute(project, run, state, worker, request_model):
                         packet = contract_review.packet(state, key, submit_name, value, task, expected_snapshot)
                         review_id = acceptance.digest(packet)
                         path = run / 'contract-reviews' / (review_id + '.json')
+                        review_policy = mission.read(run / 'contract-policy.json')
                         if path.exists():
                             receipt = mission.read(path)
                             if not contract_review.same(receipt['packet'], packet):
@@ -580,17 +591,15 @@ def _execute(project, run, state, worker, request_model):
                                 origin = 'literal_preflight'
                             else:
                                 issues = []
-                                if (mission.read(run / 'contract-policy.json') == contract_review.POLICY
-                                        and submit_name in {'submit_checks', 'submit_goal_checks'}
-                                        and contract_review.claims(value)):
+                                if contract_review.requires_oracle(review_policy, packet):
                                     blind = contract_review.oracle_packet(packet)
-                                    oracle = role('contract-oracle-' + acceptance.digest(blind), contract_review.ORACLE_PROMPT,
+                                    oracle = role('contract-oracle-' + acceptance.digest(blind), contract_review.oracle_prompt(blind),
                                         'submit_contract_oracle', lambda result: contract_review.oracle_verdict(result, blind),
                                         expected_snapshot=expected_snapshot, task=acceptance.encoded(blind))
                                     issues = contract_review.oracle_issues(packet, oracle)
                                 if issues:
                                     verdict = {'decision': 'revise', 'issues': issues,
-                                               'rationale': 'Proposed assertions disagree with independently derived expected values.'}
+                                               'rationale': 'Proposed contract disagrees with independently derived return or assertion expectations.'}
                                     origin = 'independent_expected_values'
                                 elif submit_name == 'submit_route' and value['route'] == 'execute':
                                     verdict = {'decision': 'approve', 'issues': [],
@@ -613,6 +622,7 @@ def _execute(project, run, state, worker, request_model):
                             raise HornetError('Contract review ' + verdict['decision'] + ': ' + '; '.join(verdict['issues']))
                         # Reapply deterministic checks even when a saved model approval is reused.
                         contract_review.preflight(state['goal'], submit_name, value)
+                        contract_review.validate_oracle(review_policy, packet, receipt)
                         record['contract_review'] = ref
                     record['value'] = value
                     save()
@@ -653,7 +663,8 @@ def _execute(project, run, state, worker, request_model):
 
     def sync_child(ident, child_run):
         job = session.load(project, child_run)
-        state['cell_usage'][ident] = job['tools_used']
+        offset = goal_repair.active(run, state)[1]['cell_tools_before'] if state['phase'] == 'goal_repair' else 0
+        state['cell_usage'][ident] = offset + job['tools_used']
         save()
         return job
 
@@ -687,12 +698,13 @@ def _execute(project, run, state, worker, request_model):
                 def validate_intake(value):
                     intake.document(state, value)
                     file_scope.validate_plan(run, state, value['plan'])
+                    goal_contract.validate_plan(run, state, value['plan'])
                     if revision is not None:
                         goals.validate_scope(revision, value['plan'])
                 choice = intake.saved(run, state) if (run / 'intake.json').exists() else role(
                     'intake', prompt,
                     'submit_intake', validate_intake,
-                    task=acceptance.encoded(mission.document(state['goal'])['requirements']))
+                    task=acceptance.encoded(mission.document(state['goal'])['requirements']) + goal_contract.brief(run, state))
                 if state.get('plan_policy'):
                     proposal = planning.propose(run, state, choice)
                     save()
@@ -764,6 +776,13 @@ def _execute(project, run, state, worker, request_model):
                 state['phase'] = 'goal_checks' if state['schema_version'] >= 3 else 'checker'
                 save()
             elif state['phase'] == 'goal_checks':
+                supplied = goal_contract.read(run, state)
+                if supplied is not None:
+                    goal_contract.validate_plan(run, state, state['plan'])
+                    mission.immutable(run / 'goal-acceptance.json', supplied)
+                    state.update(goal_checks=supplied, goal_checks_sha256=acceptance.digest(supplied), phase='checker')
+                    save()
+                    continue
                 interfaces = [{key: cell[key] for key in ('id', 'files', 'depends_on', 'result')}
                               for cell in state['plan']['cells'] if cell.get('kind') != 'research']
                 allowed = [path for cell in state['plan']['cells'] for path in cell['files']]
@@ -979,6 +998,43 @@ def _execute(project, run, state, worker, request_model):
                 state['phase'] = 'checker'
                 save()
                 progress('cell_completed', cell=ident, value=value)
+            elif state['phase'] == 'goal_repair':
+                record, contract = goal_repair.active(run, state)
+                ident = contract['cell']
+                scoped = ScopedWorker(worker, contract['files'],
+                    lambda arguments, call_id: peers.post(ident, arguments, call_id),
+                    tree.LIMITS['recent_exchanges'] if tree.enabled(state) else None)
+                scoped.question_scope = {'root_run': str(run), 'goal_id': questions.goal_id(run, state.get('goal_sha256')),
+                                         'cell_id': ident}
+                scoped.detect_stagnation = True
+                child_run = goal_repair.job_path(run, contract)
+                if child_run is None:
+                    if session.snapshot(worker) != contract['source']:
+                        raise HornetError('Source changed before starting the goal repair')
+                    arguments = SimpleNamespace(**dict(state['settings'], task=contract['task'], task_file=None,
+                        acceptance_file=str(goal_repair.directory(run, contract['number']) / 'acceptance.json'),
+                        worker_config=str(run / 'worker.json'), max_turns=contract['max_turns'], max_tools=contract['max_tools'],
+                        tools=WORK_TOOLS, run_dir=str(goal_repair.directory(run, contract['number']) / 'jobs')))
+                    result = session.work(project, arguments, scoped, request, boundary)
+                    child_run = Path(result['run_dir'])
+                else:
+                    child = sync_child(ident, child_run)
+                    result = (read_json(child_run / 'result.json') if child['phase'] == 'complete' else
+                              session.resume(project, SimpleNamespace(run=str(child_run)), scoped, request, boundary))
+                child = sync_child(ident, child_run)
+                if result.get('status') in {'waiting_for_user', 'question_cancelled'}:
+                    raise questions.WaitingForUser(child['waiting_question'])
+                if not result.get('ok'):
+                    if result.get('status') == 'stopped_by_operator':
+                        raise StopRequested(result.get('error', 'Repair stopped by operator'))
+                    label = ('Overall goal acceptance checks failed' if contract['gate'] == 'goal' else
+                             'Inherited revision checks failed')
+                    raise HornetError(label + '; bounded repair did not verify: ' + result.get('error', result['status']))
+                if session.snapshot(worker) != child['snapshot']:
+                    raise HornetError('Source changed after the goal repair')
+                goal_repair.publish(project, run, state)
+                save()
+                progress('goal_repair_completed', cell=ident, number=contract['number'])
             elif state['phase'] == 'final_checks':
                 returns.validate_completed(project, run, state)
                 if session.snapshot(worker) != state['snapshot']:
@@ -990,6 +1046,8 @@ def _execute(project, run, state, worker, request_model):
                     save()
                     continue
                 state['final_checks_in_flight'] = True
+                state['final_rounds'] = state.get('final_rounds', 0) + 1
+                final_audit = audit / 'final-rounds' / str(state['final_rounds'])
                 save()
                 for cell in tree.postorder(state):
                     boundary()
@@ -999,6 +1057,7 @@ def _execute(project, run, state, worker, request_model):
                     record = state['cells'][cell['id']]
                     report = acceptance.evaluate(worker, record['checks'],
                         lambda value: stored(run / 'final-checks' / (cell['id'] + '.json'), value))
+                    mission.immutable(final_audit / 'cells' / (cell['id'] + '.json'), report)
                     if (report['ok'] is not True or acceptance.encoded(cells.extract(report, record['marker'], cell))
                             != acceptance.encoded(record['value'])):
                         if session.snapshot(worker) == state['snapshot']:
@@ -1006,27 +1065,39 @@ def _execute(project, run, state, worker, request_model):
                             save()
                         raise HornetError('Final cell checks or dependency value changed: ' + cell['id'])
                 if state['schema_version'] >= 3:
-                    path = audit / 'goal-checks.json'
+                    path = audit / 'goal-checks.json' if not (audit / 'goal-checks.json').exists() else final_audit / 'goal-checks.json'
                     report = acceptance.evaluate(worker, state['goal_checks'], lambda value: stored(path, value))
                     if session.snapshot(worker) != state['snapshot']:
                         raise HornetError('Overall goal checks changed source or worker identity')
                     state['goal_verification'] = mission.reference(run, path)
                     if report['ok'] is not True:
                         state['final_checks_in_flight'] = False
+                        dispatched = goal_repair.prepare(run, state, 'goal', state['goal_verification'], cell_task)
                         save()
+                        if dispatched:
+                            progress('goal_repair_requested', cell=state['active_cell'], number=state['active_goal_repair'])
+                            continue
                         raise HornetError('Overall goal acceptance checks failed; cell success alone is insufficient')
                 if revision is not None:
                     for item in revision['regressions']:
                         boundary()
                         path = run / 'revision-checks' / (item['sha256'] + '.json')
                         report = acceptance.evaluate(worker, item['plan'], lambda value: stored(path, value))
-                        stored(audit / 'revision-checks' / (item['sha256'] + '.json'), report)
+                        retained = final_audit / 'revision-checks' / (item['sha256'] + '.json')
+                        mission.immutable(retained, report)
                         if session.snapshot(worker) != state['snapshot']:
                             raise HornetError('Inherited revision checks changed source or worker identity')
                         if report['ok'] is not True:
                             state['final_checks_in_flight'] = False
+                            dispatched = goal_repair.prepare(run, state, 'revision:' + item['sha256'],
+                                                             mission.reference(run, retained), cell_task)
                             save()
+                            if dispatched:
+                                progress('goal_repair_requested', cell=state['active_cell'], number=state['active_goal_repair'])
+                                break
                             raise HornetError('Inherited revision checks failed: ' + item['label'])
+                if state['phase'] == 'goal_repair':
+                    continue
                 if session.snapshot(worker) != state['snapshot']:
                     raise HornetError('Final recipe checks changed source or worker identity')
                 state['final_checks_in_flight'] = False

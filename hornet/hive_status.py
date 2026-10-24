@@ -5,7 +5,7 @@ import os
 from pathlib import Path
 
 from . import hive
-from .coding import activity, mission, questions, recovery
+from .coding import activity, goal_repair, mission, questions, recovery
 from .coding.locking import process_alive
 from .project import HornetError, is_link
 
@@ -182,9 +182,21 @@ def goal(project, run):
         'tool_limit': settings.get('max_tools'), 'attempts': state.get('attempts', 0),
         'stage': progress.get('stage'), 'error': state.get('active_error'),
         'revision': revision,
+        'goal_repairs': {'started': len(state.get('goal_repairs', [])),
+                        'completed': sum('completion' in row for row in state.get('goal_repairs', [])),
+                        'active': state.get('active_goal_repair')},
         'cells_verified': len(state.get('values', {})) if auto else int(state['phase'] == 'complete')}
     nodes = flattened(state) if auto else []
     goal_row['cells_total'] = len(nodes) if auto else 1
+    if auto and (run / 'supervisor/policy.json').exists():
+        from .coding import supervisor
+        try:
+            rules, enabled = supervisor.policy(project, run)
+            events = supervisor.history(project, run, rules)
+            goal_row['supervisor'] = {'enabled': enabled, 'activations': len(events),
+                'limit': rules['max_activations'], 'unresolved': any(outcome is None for _, outcome in events)}
+        except (HornetError, OSError, ValueError, TypeError, KeyError):
+            goal_row['supervisor'] = {'error': 'Supervisor evidence needs inspection'}
     rows = []
     # The orchestration cell makes intake and final verification visible too.
     controller = {'id': '@goal' if auto else 'worker', 'task': goal_row['goal'],
@@ -194,7 +206,13 @@ def goal(project, run):
         key = cell['id']
         root_cell = depth == 0
         record = state.get('cells', {}).get(key, {}) if auto else state
+        repairing = auto and not root_cell and state['phase'] == 'goal_repair' and state.get('active_cell') == key
         child = child_run(project, run, key, record) if auto and not root_cell else None
+        if repairing:
+            contract = goal_repair.active(run, state)[1]
+            child = goal_repair.job_path(run, contract)
+            if child:
+                child = project.path(child, write=True)
         job = read(child / 'checkpoint.json') if child else (state if not auto else {})
         action = last_action(run, None if root_cell else key)
         if child:
@@ -203,9 +221,9 @@ def goal(project, run):
                 action = other
         active = live and (state.get('active_cell') == key if not root_cell else not auto or state['phase'] in {'intake', 'plan', 'goal_checks', 'final_checks'})
         verified = key in state.get('values', {}) if not root_cell else state['phase'] == 'complete'
-        active = active and not verified and (root_cell or state['phase'] in {'checker', 'cell_running'})
+        active = active and (not verified or repairing) and (root_cell or state['phase'] in {'checker', 'cell_running', 'goal_repair'})
         dependencies = cell.get('depends_on', [])
-        cell_status = ('verified' if verified else status if active or root_cell else
+        cell_status = (('repairing' if active else status) if repairing else 'verified' if verified else status if active or root_cell else
                        'failed' if record.get('active_error') else 'blocked' if any(d not in state.get('values', {}) for d in dependencies) else 'pending')
         if not active and auto and state.get('active_cell') == key and not verified:
             cell_status = status
@@ -215,7 +233,8 @@ def goal(project, run):
         row = {'id': key, 'goal_id': ident, 'run_dir': str(run), 'run': goal_row['run'],
             'task': cell.get('task', ''), 'kind': cell.get('kind', 'code'), 'parent': parent,
             'depth': depth, 'depends_on': dependencies, 'files': cell['files'],
-            'status': cell_status, 'active': active, 'verified': verified,
+            'status': cell_status, 'active': active, 'verified': verified and not repairing,
+            'repairing': repairing, 'prior_verified': verified,
             'current': auto and not root_cell and state.get('active_cell') == key,
             'assigned_agent': profile['agent'] if profile else None,
             'assigned_model': profile['model'] if profile else settings.get('model'),
@@ -224,8 +243,9 @@ def goal(project, run):
             'last_action': action, 'phase': job.get('phase') or state['phase'],
             'tools_used': job.get('tools_used', state.get('cell_usage', {}).get(key, 0)),
             'model_requests': job.get('turns_used'), 'attempts': job.get('attempts', 0),
-            'error': record.get('active_error'),
-            'checks': (checks(run, key, record, child) if not root_cell else {'passed': None, 'total': 0, 'observed': False}) if auto else ticket_checks(run, state)}
+            'error': job.get('active_error') if repairing else record.get('active_error'),
+            'checks': (ticket_checks(child, job) if child else {'passed': None, 'total': len(contract['checks']['checks']), 'observed': False}) if repairing else
+                      (checks(run, key, record, child) if not root_cell else {'passed': None, 'total': 0, 'observed': False}) if auto else ticket_checks(run, state)}
         rows.append(row)
     return goal_row, rows
 

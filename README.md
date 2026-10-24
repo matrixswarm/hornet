@@ -25,7 +25,7 @@ configure a worker VM and connect your local model for coding goals.
 
 ## Try one completed goal
 
-1. Open the [v0.16.1 release](https://github.com/matrixswarm/hornet/releases/tag/v0.16.1).
+1. Open the [v0.17.0 release](https://github.com/matrixswarm/hornet/releases/tag/v0.17.0).
 2. Download the **starter ZIP**, `SHA256SUMS`, `SHA256SUMS.asc`, the public signing
    key and `VERIFY-RELEASE.md`.
 3. Verify the download, extract it, and follow **START-HERE.md** inside.
@@ -62,6 +62,13 @@ model connections. Run `hornet hive init`, select `--agent gemma`, or assign an
 unfinished goal cell with `hornet hive assign RUN CELL --agent qwen`.
 See [the hive guide](docs/HIVE.md) for role routing, shared resource claims and
 resume. Named agents are available in 0.16.0 and later.
+
+## Quiet supervision
+
+In 0.17.0, explicitly enroll saved goals for bounded automatic resume. The
+periodic scan uses no inference and respects pauses, questions, active workers
+and remaining budgets. Each activation leaves a receipt; uncertain outcomes
+stay stopped for inspection. See [the supervisor guide](docs/SUPERVISOR.md).
 
 ## Questions wait for you
 

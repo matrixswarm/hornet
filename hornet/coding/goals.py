@@ -24,6 +24,7 @@ def file_index(run, state):
             'phase': state['phase'], 'workspace': state['settings'].get('workspace'),
             'source_sha256': acceptance.digest(state['snapshot']), 'files': result,
             'revision': state.get('revision'),
+            'goal_repairs': state.get('goal_repairs', []),
             'scope': 'Declared cell dependencies and verified changes; not a static import graph'}
 
 
@@ -77,6 +78,7 @@ def validate(run, state):
                 or source_cell['id'] not in revision['affected_cells']
                 or source_cell['files'] != revision['targets']
                 or any(source_cell[key] != prior[key] for key in ('files', 'result', 'return_manifest'))
+                or source_cell.get('repair_completions') != prior.get('repair_completions')
                 or not isinstance(source_cell.get('changed_files'), list)):
             raise HornetError('Selected revision cell lineage changed')
     if state['plan'] is not None:
@@ -133,6 +135,11 @@ def route(run, state, targets):
     context = [{'id': c['id'], 'files': c['files'], 'depends_on': c['depends_on'],
                 'result': c['result'], 'return_manifest': state['cells'][c['id']]['return_manifest']}
                for c in contracts if c['id'] in affected]
+    for item in context:
+        repairs = [record['completion'] for record in state.get('goal_repairs', [])
+                   if record.get('completion') and mission.read(run / record['contract']['path'])['cell'] == item['id']]
+        if repairs:
+            item['repair_completions'] = repairs
     return {'schema_version': 1, 'kind': 'goal_revision', 'parent_run': str(run),
             'parent_completion': mission.reference(run, run / 'goal-completion.json'),
             'parent_checkpoint': mission.reference(run, run / 'recipe-checkpoint.json'),
@@ -158,6 +165,9 @@ def route_cell(run, state, ident):
     revision['source_cell'] = {'id': ident, 'task': cell['task'], 'files': cell['files'],
         'result': cell['result'], 'value': state['values'][ident],
         'return_manifest': ref, 'changed_files': receipt['changed_files']}
+    prior = next(item for item in revision['context'] if item['id'] == ident)
+    if prior.get('repair_completions'):
+        revision['source_cell']['repair_completions'] = prior['repair_completions']
     return revision
 
 
@@ -171,7 +181,8 @@ def brief(revision):
         value['source_cell'] = revision['source_cell']
     return ('\nController revision routing (data): ' + acceptance.encoded(value) +
             '\nImplement the requested follow-up in these files. Preserve earlier behavior; inherited goal checks '
-            'will be rerun. Prior transcripts and full source are retained outside this prompt. Read only the relevant files.')
+            'will be rerun. Return manifests record the original cell; repair receipts record subsequent changes. '
+            'Prior transcripts and full source are retained outside this prompt. Read the current relevant files.')
 
 
 def regression_evidence(run, state):

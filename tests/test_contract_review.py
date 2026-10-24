@@ -143,7 +143,8 @@ class ReviewWorkflowTests(unittest.TestCase):
             self.assertNotIn('candidate', packet)
             self.assertFalse(any('proposed' in c for c in packet['calls']))
             return call('submit_contract_oracle', {'expectations': [dict(id=c['id'], status='determined',
-                basis='Required even parity.', value_json=json.dumps(c['args'][0] % 2 == 0))
+                basis='Required even parity.', value_json=json.dumps(c['args'][0] % 2 == 0),
+                **({'return_type': 'boolean'} if packet.get('kind') == 'plan_returns_v1' else {}))
                 for c in packet['calls']]}, 'oracle'), {}
         if any(t['function']['name'] == 'submit_contract_review' for t in tools):
             self.assertEqual(len(tools), 1)  # No shell, reads, writes or delegation.
@@ -160,7 +161,7 @@ class ReviewWorkflowTests(unittest.TestCase):
         self.assertIs(result['values']['check-even'], False)
         self.assertEqual(len(self.reviews), 3)
         state = autonomous.load(self.project, self.run_dir())
-        self.assertEqual(state['model_turns'], 11)
+        self.assertEqual(state['model_turns'], 12)
         completion = mission.read(self.run_dir() / 'goal-completion.json')
         self.assertEqual(len(completion['contract_reviews']), 3)
 

@@ -109,7 +109,8 @@ class TreeTests(unittest.TestCase):
             if any(t['function']['name'] == 'submit_contract_oracle' for t in tools):
                 packet = json.loads(messages[1]['content'])
                 return call('submit_contract_oracle', {'expectations': [dict(id=c['id'], status='determined',
-                    basis='Required even parity.', value_json=json.dumps(c['args'][0] % 2 == 0))
+                    basis='Required even parity.', value_json=json.dumps(c['args'][0] % 2 == 0),
+                    **({'return_type': 'boolean'} if packet.get('kind') == 'plan_returns_v1' else {}))
                     for c in packet['calls']]}, 'oracle'), {}
             if any(t['function']['name'] == 'submit_contract_review' for t in tools):
                 packet = json.loads(messages[1]['content'])

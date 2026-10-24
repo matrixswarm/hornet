@@ -156,6 +156,7 @@ class Worker:
         env.update(PYTHONUTF8="1", PYTHONDONTWRITEBYTECODE="1", PYTHONPATH=str(self.root), GIT_TERMINAL_PROMPT="0")
         started = time.monotonic()
         timed_out = False
+        termination_error = None
         with tempfile.TemporaryFile() as output:
             child = subprocess.Popen(command, cwd=self.root, env=env, stdin=subprocess.DEVNULL,
                                      stdout=output, stderr=subprocess.STDOUT, start_new_session=(os.name == "posix"))
@@ -166,14 +167,29 @@ class Worker:
                 if os.name == "posix":
                     os.killpg(child.pid, signal.SIGKILL)
                 else:
-                    child.kill()
+                    # Windows venv launchers can have an interpreter child. Stop
+                    # the tree before reporting a timeout or releasing its cwd.
+                    taskkill = Path(os.environ.get("SystemRoot", r"C:\Windows")) / "System32/taskkill.exe"
+                    try:
+                        stopped = subprocess.run(
+                            [str(taskkill), "/PID", str(child.pid), "/T", "/F"],
+                            stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                            timeout=10, creationflags=subprocess.CREATE_NO_WINDOW)
+                        if stopped.returncode:
+                            raise WorkerError("Timed-out command tree termination could not be confirmed")
+                    except (OSError, subprocess.TimeoutExpired, WorkerError):
+                        child.kill()
+                        termination_error = "Timed-out command tree termination could not be confirmed"
                 child.wait()
                 code = 124
             size = output.tell()
             output.seek(max(0, size - 24000))
             text = output.read().decode("utf-8", "replace")
-        return {"ok": code == 0, "exit_code": code, "output": text, "output_bytes": size,
+        result = {"ok": code == 0, "exit_code": code, "output": text, "output_bytes": size,
                 "truncated": size > 24000, "timed_out": timed_out, "seconds": round(time.monotonic() - started, 3)}
+        if termination_error:
+            result.update(error=termination_error, termination_confirmed=False)
+        return result
 
     def run_tests(self):
         return self.run_command(["python3", "-m", "unittest", "discover", "-s", "tests", "-v"], timeout=120)

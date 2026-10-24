@@ -68,6 +68,9 @@ def execute(args):
         if args.hive_action == 'terminal':
             from .hive_terminal import run
             return run(project, args)
+        if args.hive_action == 'supervise':
+            from .coding.supervisor import command
+            return command(project, args)
         if args.hive_action == 'resume-cell':
             from .coding import cell_actions
             return cell_actions.resume(project, args.run, args.cell)

@@ -160,7 +160,7 @@ def clarifications(run, state):
         proposal = mission.read(run / ref['path'])
         archived = mission.read(run / proposal['role']['path'])
         for item in archived.get('answered_questions', []):
-            if questions.resolution(item['reference']) != item['answer']:
+            if questions.resolution(item['reference'], publish_missing=False) != item['answer']:
                 raise HornetError('Saved planning clarification changed')
             found[item['reference']['record']['id']] = item
     return list(found.values())

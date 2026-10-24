@@ -2,7 +2,9 @@
 import argparse
 import hashlib
 import json
+import os
 from pathlib import Path
+import subprocess
 import tempfile
 import unittest
 from unittest.mock import MagicMock, patch
@@ -58,6 +60,35 @@ class WorkerTests(unittest.TestCase):
     def test_size_limits(self):
         with self.assertRaises(WorkerError):
             self.worker.write_file("large", "x" * (256 * 1024 + 1), "")
+
+    @unittest.skipUnless(os.name == 'nt', 'Windows process-tree termination')
+    def test_timeout_stops_descendant_before_workspace_cleanup(self):
+        nested = self.root / 'child-cwd'
+        nested.mkdir()
+        child_code = "from pathlib import Path; import time; Path('started').write_text('yes'); time.sleep(30)"
+        code = ("import subprocess,sys,time; "
+                "subprocess.Popen([sys.executable,'-c'," + repr(child_code) + "],cwd='child-cwd'); "
+                "time.sleep(30)")
+        result = self.worker.run_command(['python3', '-c', code], timeout=3)
+        self.assertTrue((nested / 'started').exists(), 'Descendant must have started before the timeout')
+        self.assertTrue(result['timed_out'])
+        self.assertEqual(result['exit_code'], 124)
+        # Windows refuses this cleanup while the descendant still holds its cwd.
+        self.temp.cleanup()
+
+    @unittest.skipUnless(os.name == 'nt', 'Windows process-tree termination')
+    def test_unconfirmed_timeout_termination_is_an_error(self):
+        child = MagicMock()
+        child.wait.side_effect = [subprocess.TimeoutExpired([], 1), 0]
+        with patch('hornet.coding.worker.subprocess.Popen', return_value=child), \
+                patch('hornet.coding.worker.subprocess.run',
+                      return_value=subprocess.CompletedProcess([], 1, b'fixture failure')):
+            result = self.worker.run_command(['python3', '-c', 'import time; time.sleep(2)'], timeout=1)
+        self.assertFalse(result['ok'])
+        self.assertTrue(result['timed_out'])
+        self.assertFalse(result['termination_confirmed'])
+        self.assertIn('termination could not be confirmed', result['error'])
+        child.kill.assert_called_once_with()
 
 
 class ControllerTests(unittest.TestCase):

@@ -166,7 +166,20 @@ class Worker:
                 if os.name == "posix":
                     os.killpg(child.pid, signal.SIGKILL)
                 else:
-                    child.kill()
+                    # Windows venv launchers can have an interpreter child. Stop
+                    # the tree before reporting a timeout or releasing its cwd.
+                    taskkill = Path(os.environ.get("SystemRoot", r"C:\Windows")) / "System32/taskkill.exe"
+                    try:
+                        stopped = subprocess.run(
+                            [str(taskkill), "/PID", str(child.pid), "/T", "/F"],
+                            stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                            timeout=10, creationflags=subprocess.CREATE_NO_WINDOW)
+                        if stopped.returncode:
+                            raise WorkerError("Timed-out command tree termination could not be confirmed")
+                    except (OSError, subprocess.TimeoutExpired, WorkerError):
+                        child.kill()
+                        child.wait()
+                        raise WorkerError("Timed-out command tree termination could not be confirmed") from None
                 child.wait()
                 code = 124
             size = output.tell()

@@ -41,6 +41,8 @@ class LiteralTests(unittest.TestCase):
                 self.assertNotIn(review.CHECK_REVIEW, prompt)
         with self.assertRaises(HornetError):
             review.review_prompt('write_file')
+        self.assertIn('"enum":[false]', contract_wire.CALL_GUIDANCE)
+        self.assertIn('singleton enum', contract_wire.CALL_GUIDANCE)
 
     def test_changed_review_instructions_get_new_cache_identity(self):
         state = {'roles': {}, 'goal': 'offset(3)=7.', 'goal_sha256': 'goal'}
@@ -60,6 +62,24 @@ class LiteralTests(unittest.TestCase):
         self.assertEqual(json.loads(presented), packet)
         self.assertEqual(list(json.loads(presented))[-1], 'candidate')
         self.assertEqual(review.acceptance.digest(packet), before)
+
+    def test_check_review_exposes_parsed_exception_control_flow(self):
+        import ast
+        source = ('try:\n    validate(True)\nexcept TypeError:\n    pass\n'
+                  '# independent negative case\try:\n    validate(-1)\n'
+                  'except ValueError:\n    pass\n')
+        packet = {'submission': 'submit_checks', 'candidate': {'checks': [{'id': 'types', 'python': source}]}}
+        before = review.acceptance.digest(packet)
+        normalized = json.loads(review.review_task(packet))['candidate']['checks'][0]['python']
+        self.assertNotIn('# independent', normalized)
+        self.assertIn('except TypeError:\n    pass\n    validate(-1)', normalized)
+        self.assertEqual(ast.dump(ast.parse(source)), ast.dump(ast.parse(normalized)))
+        self.assertEqual(review.acceptance.digest(packet), before)
+        self.assertIn('inside an except handler', review.CHECK_REVIEW)
+        self.assertIn('assertRaises', review.CHECK_AUTHOR_GUIDANCE)
+        for guidance in (review.CHECK_REVIEW, review.CHECK_AUTHOR_GUIDANCE):
+            self.assertIn('test discovery does not run automatically', guidance)
+            self.assertIn('test class', guidance)
 
     def test_exact_typed_examples(self):
         found = review.examples('offset(3)=7, offset(-5)=-9. f(true) returns false. g("3") == "7".')
@@ -120,6 +140,92 @@ class LiteralTests(unittest.TestCase):
         proposal['cells'][0]['result']['kwargs_json'] = '{"n":"3"}'
         with self.assertRaises(HornetError):
             review.preflight('offset(n=3)="ok".', 'submit_plan', proposal)
+
+
+class CallBindingTests(unittest.TestCase):
+    def packet(self, sources):
+        candidate = {'checks': [{'id': 'check-' + str(i), 'python': source}
+                                for i, source in enumerate(sources)]}
+        return review.packet({'roles': {}, 'goal': 'FlatRate returns 500; WeightRate returns 200 + grams * 3.',
+                              'goal_sha256': 'goal'}, 'verifier', 'submit_checks', candidate, None, {})
+
+    def test_identically_named_methods_keep_their_own_receiver(self):
+        packet = self.packet([
+            'from shipping import FlatRate\ninstance = FlatRate()\nassert instance.quote(500) == 500',
+            'from shipping import WeightRate\ninstance = WeightRate()\nassert instance.quote(500) == 1700'])
+        calls = review.oracle_packet(packet)['calls']
+        self.assertEqual([c['call_context']['receiver']['function'] for c in calls],
+                         ['shipping.FlatRate', 'shipping.WeightRate'])
+        self.assertEqual([c['call_context']['method'] for c in calls], ['quote', 'quote'])
+        self.assertEqual([c['args'] for c in calls], [[500], [500]])
+        result = {'expectations': [{'id': 'c00', 'status': 'determined', 'value_json': '500', 'basis': 'Flat rate'},
+                                   {'id': 'c01', 'status': 'determined', 'value_json': '1700', 'basis': '200 + 1500'}]}
+        self.assertEqual(review.oracle_issues(packet, result), [])
+        result['expectations'][0]['value_json'] = '1700'
+        self.assertTrue(review.oracle_issues(packet, result))
+
+    def test_aliases_and_prior_calls_preserve_order_without_answers(self):
+        packet = self.packet(['import shipping as api\ninstance = api.FlatRate(3, mode="x")\n'
+            'alias = instance\nassert alias.quote(1) == "SECRET_ANSWER"\nassert instance.quote(2) == 9999'])
+        blind = review.oracle_packet(packet)
+        first, second = [c['call_context'] for c in blind['calls']]
+        self.assertEqual(first['receiver'], {'function': 'shipping.FlatRate', 'args': [3], 'kwargs': {'mode': 'x'}})
+        self.assertEqual(first['prior_calls'], [])
+        self.assertEqual(second['prior_calls'], [{'method': 'quote', 'args': [1], 'kwargs': {}}])
+        self.assertNotIn('SECRET_ANSWER', json.dumps(blind))
+        self.assertNotIn('9999', json.dumps(blind))
+        self.assertNotIn('candidate', blind)
+
+    def test_constructor_reassignment_and_separate_checks_never_reuse_receivers(self):
+        packet = self.packet(['from shipping import FlatRate, WeightRate\ninstance = FlatRate()\n'
+            'assert instance.quote(1) == 500\ninstance = WeightRate()\nassert instance.quote(1) == 203',
+            'assert instance.quote(1) == 500'])
+        contexts = [c['call_context'] for c in review.oracle_packet(packet)['calls']]
+        self.assertEqual(contexts[0]['receiver']['function'], 'shipping.FlatRate')
+        self.assertEqual(contexts[1]['receiver']['function'], 'shipping.WeightRate')
+        self.assertEqual(contexts[1]['prior_calls'], [])
+        self.assertEqual(contexts[2], {'resolution': 'unresolved'})
+
+    def test_unknown_control_flow_and_mutations_discard_context(self):
+        for mutation in ('instance = factory()', 'mutate(instance)', 'instance.quote = custom',
+                         'if condition:\n    instance = factory()', 'del instance',
+                         'other = mutate(instance)', 'instance, other = factory()'):
+            with self.subTest(mutation=mutation):
+                packet = self.packet(['from shipping import FlatRate\ninstance = FlatRate()\n' +
+                    mutation + '\nassert instance.quote(500) == 500'])
+                self.assertEqual(review.oracle_packet(packet)['calls'][0]['call_context'], {'resolution': 'unresolved'})
+
+    def test_named_import_aliases_are_resolved_in_statement_order(self):
+        packet = self.packet(['from shipping import flat as f\nassert f(1) == 500\n'
+            'from shipping import weight as f\nassert f(1) == 203'])
+        contexts = [c['call_context'] for c in review.oracle_packet(packet)['calls']]
+        self.assertEqual([c['function'] for c in contexts], ['shipping.flat', 'shipping.weight'])
+
+    def test_old_packets_keep_original_oracle_shape_and_new_prompt_is_bound(self):
+        packet = self.packet(['from shipping import flat\nassert flat(1) == 500'])
+        blind = review.oracle_packet(packet)
+        self.assertEqual(blind['kind'], 'literal_calls_v2')
+        self.assertEqual(blind['instructions_sha256'], review.acceptance.digest(review.BOUND_ORACLE_PROMPT))
+        self.assertEqual(review.oracle_prompt(blind), review.BOUND_ORACLE_PROMPT)
+        previous = copy.deepcopy(packet)
+        previous.pop('call_bindings')
+        previous.pop('oracle_instructions_sha256')
+        old = review.oracle_packet(previous)
+        self.assertNotIn('kind', old)
+        self.assertNotIn('call_context', old['calls'][0])
+        self.assertEqual(review.oracle_prompt(old), review.ORACLE_PROMPT)
+        with patch.object(review, 'BOUND_ORACLE_PROMPT', review.BOUND_ORACLE_PROMPT + ' revised'):
+            changed = self.packet(['from shipping import flat\nassert flat(1) == 500'])
+        self.assertNotEqual(review.acceptance.digest(changed), review.acceptance.digest(packet))
+        self.assertEqual(review.oracle_packet(packet), blind)
+
+    def test_large_context_is_bounded_and_generated_code_is_not_executed(self):
+        packet = self.packet(['from shipping import FlatRate\ninstance = FlatRate("' + 'x'*3000 + '")\n'
+            'assert instance.quote(1) == 500'])
+        self.assertEqual(packet['call_bindings']['c00'], {'resolution': 'unresolved'})
+        packet = self.packet(['raise RuntimeError("do not run")\n'
+            'from shipping import flat\nassert True; assert flat(1) == 500'])
+        self.assertEqual(packet['call_bindings']['c00']['function'], 'shipping.flat')
 
 
 class ReviewWorkflowTests(unittest.TestCase):
@@ -345,7 +451,7 @@ class ReviewWorkflowTests(unittest.TestCase):
         self.checks['checks'][0]['python'] += '\nassert is_even(-4) is False'
         corrected = [False]
         def model(messages, tools, *unused):
-            if any(t['function']['name'] == 'submit_goal_checks' for t in tools) and 'expects true' in json.dumps(messages):
+            if any(t['function']['name'] == 'submit_goal_checks' for t in tools) and 'independent derivation returned true' in json.dumps(messages):
                 self.checks['checks'][0]['python'] = self.checks['checks'][0]['python'].replace('is_even(-4) is False', 'is_even(-4) is True')
                 corrected[0] = True
             if any(t['function']['name'] == 'submit_contract_review' for t in tools):
@@ -374,7 +480,9 @@ class OracleTests(unittest.TestCase):
 
     def test_derived_value_is_compared_mechanically(self):
         result = {'expectations': [{'id': 'c00', 'status': 'determined', 'basis': '-5*2+1=-9', 'value_json': '-9'}]}
-        self.assertIn('expects -9', review.oracle_issues(self.packet(), result)[0])
+        issue = review.oracle_issues(self.packet(), result)[0]
+        self.assertIn('asserts -8; independent derivation returned -9', issue)
+        self.assertIn('Recheck this disagreement against the original requirements', issue)
 
     def test_missing_reordered_duplicate_or_invalid_json_fails(self):
         packet = review.oracle_packet(self.packet())

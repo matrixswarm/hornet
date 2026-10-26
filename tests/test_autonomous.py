@@ -290,6 +290,27 @@ class AutonomousTests(unittest.TestCase):
         result = autonomous.start(self.project, self.args, self.worker, self.model)
         self.assertTrue(result['ok'], result)
 
+    def test_exception_only_unittest_check_passes_cell_and_goal_gates(self):
+        self.checks['checks'].append({'id': 'bad-type', 'description': 'Invalid type raises TypeError',
+            'paths': ['parity_cell.py'], 'timeout': 5,
+            'python': 'from parity_cell import is_even\nfrom unittest import TestCase\n'
+                      'check = TestCase()\ncheck.assertRaises(TypeError, is_even, None)'})
+        result = autonomous.start(self.project, self.args, self.worker, self.model)
+        self.assertTrue(result['ok'], result)
+        for key in ('goal-verifier', 'verifier-check-even'):
+            self.assertEqual(self.state()['roles'][key]['turns'], 1)
+
+    def test_wrong_expected_exception_is_executed_and_fails(self):
+        self.checks['checks'].append({'id': 'bad-type', 'description': 'Wrong exception expectation',
+            'paths': ['parity_cell.py'], 'timeout': 5,
+            'python': 'from parity_cell import is_even\nfrom unittest import TestCase\n'
+                      'with TestCase().assertRaises(ValueError):\n    is_even(None)'})
+        result = autonomous.start(self.project, self.args, self.worker, self.model)
+        self.assertFalse(result['ok'], result)
+        self.assertIn('write_file', self.worker.calls)
+        self.assertEqual(self.state()['roles']['verifier-check-even']['turns'], 1)
+        self.assertTrue((self.run_dir() / 'cells/check-even/acceptance.json').exists())
+
     def test_role_inbox_is_inside_the_serialized_context_budget(self):
         original = self.model
         injected = [False]

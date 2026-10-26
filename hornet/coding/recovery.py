@@ -54,11 +54,13 @@ def observe(job, name, arguments, current):
     if current['files'] != job['snapshot']['files']:
         job.pop('stagnation_window', None)
         return False
-    if name not in {'read_file', 'list_files', 'search', 'check_ticket', 'edit_file', 'write_file'}:
+    from . import registry
+    if name not in {'read_file', 'list_files', 'search', 'check_ticket', 'edit_file', 'write_file'} | registry.NAMES:
         return False
     # Read tokens are fresh handles, not a different operation.
     normalized = {key: value for key, value in arguments.items() if key != 'read_ref'}
-    signature = acceptance.digest({'tool': name, 'arguments': normalized, 'files': current['files']})
+    signature = (registry.failure_signature(name, normalized, current) if name in registry.NAMES else
+                 acceptance.digest({'tool': name, 'arguments': normalized, 'files': current['files']}))
     window = job.setdefault('stagnation_window', [])
     window.append(signature)
     del window[:-6]

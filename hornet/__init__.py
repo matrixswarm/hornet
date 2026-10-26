@@ -8,5 +8,5 @@ and inspection of project goals/pointers. Historical engines remain separate.
 🦅 VICTORY ALWAYS! 🦅
 """
 
-__version__ = "0.17.0"
+__version__ = "0.18.0"
 __author__ = "Daniel F. MacDonald"

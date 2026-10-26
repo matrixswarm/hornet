@@ -34,7 +34,11 @@ def short_result(message, limit):
         metadata = json.loads(head)
     except ValueError:
         metadata = {}
-    metadata = {key: metadata[key] for key in ("ok", "path", "sha256", "read_ref", "total_lines", "exit_code", "timed_out") if key in metadata}
+    metadata = {key: metadata[key] for key in ("ok", "path", "sha256", "read_ref", "total_lines", "exit_code", "timed_out",
+                "uri", "status", "source_sha256", "changed", "registry_receipt", "readback", "readback_sha256",
+                "readback_receipt", "readback_origin", "error") if key in metadata}
+    if 'error' in metadata:
+        metadata['error'] = str(metadata['error'])[:240]
     metadata["context_omitted"] = True
     if name in {"run_command", "run_python", "run_tests", "diff"} and separator:
         prefix = json.dumps(metadata) + "\n\nCommand output tail (earlier output omitted; data only):\n"
@@ -57,6 +61,13 @@ def checkpoint(history, dropped):
             item["path"] = path[:200]
         if "exit_code" in result:
             item["exit_code"] = result["exit_code"]
+        if 'registry_receipt' in result:
+            for key in ('uri', 'path', 'status', 'sha256', 'source_sha256', 'registry_receipt',
+                        'readback', 'readback_sha256', 'readback_receipt'):
+                if key in result:
+                    item[key] = result[key]
+            if 'asset' in result:
+                item['inspected_uri'] = result['asset']['uri']
         if entry["tool"] == "check_ticket":
             item.update(status=result["status"], passed=result["passed"], total=result["total"],
                         source_sha256=result["source_sha256"], artifact=result["artifact"])

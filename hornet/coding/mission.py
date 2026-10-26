@@ -65,19 +65,104 @@ def behavioral_checks(checks, allowed):
     if len(checks['checks']) > 4 or any(not set(item['paths']) <= set(allowed) for item in checks['checks']):
         raise HornetError('Use at most four checks naming declared source files')
     for check in checks['checks']:
-        tree = ast.parse(check['python'])
-        imports = [alias.name for item in ast.walk(tree) if isinstance(item, ast.Import) for alias in item.names]
-        imports += [item.module or '' for item in ast.walk(tree) if isinstance(item, ast.ImportFrom)]
-        if any(any(part == 'tests' or part.startswith('test_') for part in name.split('.')) for name in imports):
-            raise HornetError('Acceptance checks must call production APIs directly, not import test modules')
-        assertions = [item for item in ast.walk(tree) if isinstance(item, ast.Assert)]
-        failures = [item for item in ast.walk(tree) if isinstance(item, ast.Raise)
-                    and isinstance(item.exc, ast.Call) and isinstance(item.exc.func, ast.Name)
-                    and item.exc.func.id == 'AssertionError']
-        if not failures and (not assertions or not any(
-                any(isinstance(node, (ast.Name, ast.Call)) for node in ast.walk(item.test))
-                or (isinstance(item.test, ast.Constant) and item.test.value is False) for item in assertions)):
-            raise HornetError('Generated checks require assertions about observed behavior')
+        validate_behavioral_source(check)
+
+
+def _has_exception_assertion(tree):
+    """Recognize explicit unittest exception checks without executing source.
+
+    This is a syntax preflight, not proof that an assertion runs or is correct.
+    Independent contract review and execution still validate the check itself.
+    """
+    class Exceptions(ast.NodeVisitor):
+        def __init__(self):
+            self.bindings = {}
+            self.found = False
+
+        def kind(self, node):
+            if isinstance(node, ast.Name):
+                return self.bindings.get(node.id)
+            if isinstance(node, ast.Attribute) and self.kind(node.value) == 'unittest' and node.attr == 'TestCase':
+                return 'case_class'
+            if isinstance(node, ast.Call) and self.kind(node.func) == 'case_class':
+                return 'case'
+
+        def assertion(self, node, context=False):
+            if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
+                    and self.kind(node.func.value) == 'case'):
+                return False
+            minimum = {'assertRaises': 1, 'assertRaisesRegex': 2}.get(node.func.attr)
+            return minimum is not None and len(node.args) >= minimum + (0 if context else 1)
+
+        def visit_Import(self, node):
+            for alias in node.names:
+                self.bindings[alias.asname or alias.name.split('.')[0]] = 'unittest' if alias.name == 'unittest' else None
+
+        def visit_ImportFrom(self, node):
+            for alias in node.names:
+                self.bindings[alias.asname or alias.name] = ('case_class'
+                    if node.module == 'unittest' and node.level == 0 and alias.name == 'TestCase' else None)
+
+        def visit_Assign(self, node):
+            self.generic_visit(node)
+            kind = self.kind(node.value)
+            for target in node.targets:
+                for name in ast.walk(target):
+                    if isinstance(name, ast.Name) and isinstance(name.ctx, ast.Store):
+                        self.bindings[name.id] = kind if isinstance(target, ast.Name) else None
+
+        def visit_AnnAssign(self, node):
+            self.generic_visit(node)
+            if isinstance(node.target, ast.Name):
+                self.bindings[node.target.id] = self.kind(node.value)
+
+        def visit_FunctionDef(self, node):
+            outer = self.bindings
+            self.bindings = dict(outer)
+            for arg in ast.walk(node.args):
+                if isinstance(arg, ast.arg):
+                    self.bindings[arg.arg] = None
+            for statement in node.body:
+                self.visit(statement)
+            self.bindings = outer
+            self.bindings[node.name] = None
+
+        visit_AsyncFunctionDef = visit_FunctionDef
+
+        def visit_Call(self, node):
+            self.found |= self.assertion(node)
+            self.generic_visit(node)
+
+        def visit_With(self, node):
+            self.found |= any(self.assertion(item.context_expr, context=True) for item in node.items)
+            self.generic_visit(node)
+
+    visitor = Exceptions()
+    visitor.visit(tree)
+    return visitor.found
+
+
+def validate_behavioral_source(check):
+    """Shared cell/goal preflight; exception-only checks are valid assertions."""
+    tree = ast.parse(check['python'])
+    imports = [alias.name for item in ast.walk(tree) if isinstance(item, ast.Import) for alias in item.names]
+    imports += [item.module or '' for item in ast.walk(tree) if isinstance(item, ast.ImportFrom)]
+    if any(any(part == 'tests' or part.startswith('test_') for part in name.split('.')) for name in imports):
+        raise HornetError('Acceptance checks must call production APIs directly, not import test modules')
+    assertions = [item for item in ast.walk(tree) if isinstance(item, ast.Assert)]
+    failures = [item for item in ast.walk(tree) if isinstance(item, ast.Raise)
+                and isinstance(item.exc, ast.Call) and isinstance(item.exc.func, ast.Name)
+                and item.exc.func.id == 'AssertionError']
+    if not failures and not _has_exception_assertion(tree) and not any(
+            any(isinstance(node, (ast.Name, ast.Call)) for node in ast.walk(item.test))
+            or (isinstance(item.test, ast.Constant) and item.test.value is False) for item in assertions):
+        raise HornetError('Check %s: Generated checks require assertions about observed behavior. '
+            'Use assert on an actual result, raise AssertionError on failure, or unittest.TestCase().assertRaises '
+            'with a callable (or a with block). Each check runs independently; import APIs and create its fixtures '
+            'inside that check. Checks execute as Python scripts; unittest/pytest test discovery does not run '
+            'automatically. Defining a test class or test method alone does not execute its assertions. '
+            'For exception checks, use a module-level TestCase instance, for example: '
+            'from unittest import TestCase; TestCase().assertRaises(ValueError, int, "x").' % check['id'])
 
 
 def reject_impossible_loop_checks(checks):
@@ -201,7 +286,8 @@ def packet(state, cell):
                 'work_packet': state['cells'][above['id']]['work_packet']}
             value['parent_inputs'] = {key: {'value': state['values'][key],
                 'manifest': state['cells'][key]['return_manifest']} for key in above['depends_on']}
-    return value
+    from . import dependency_context
+    return dependency_context.extend(state, value)
 
 
 def prepare_packet(run, state, cell):
@@ -223,6 +309,8 @@ def binding(state, cell):
 def validate(run, state):
     if state['schema_version'] < 3:
         return
+    from . import dependency_context
+    dependency_context.validate(run, state)
     from . import contract_review, planning, recovery, contract_wire, file_scope, goal_contract, goal_repair
     planning.validate(run, state)
     file_scope.validate(run, state)
@@ -278,9 +366,10 @@ def validate(run, state):
 
 
 def completion(run, state):
-    from . import tree, goals, goal_contract
+    from . import tree, goals, goal_contract, dependency_context
     goals.validate(run, state)
     goal_contract.validate(run, state)
+    dependency_context.validate(run, state)
     evidence = state['goal_verification']
     path = run / evidence['path']
     report = read(path)
@@ -311,6 +400,8 @@ def completion(run, state):
             'coverage': state['plan']['coverage'], 'goal_checks': evidence, 'final_cell_checks': finals,
             'cells': {key: state['cells'][key]['return_manifest'] for key in state['values']},
             'verification_scope': 'Executed frozen checks; assignments do not prove semantic completeness'}
+    if state.get('dependency_context_policy'):
+        value['dependency_context_policy'] = state['dependency_context_policy']
     if state['schema_version'] >= 4:
         from . import intake
         value['intake'] = intake.summary(state)

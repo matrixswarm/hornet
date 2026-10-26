@@ -152,6 +152,12 @@ class GoalTests(unittest.TestCase):
         self.assertNotIn('triple', (source.worker.root / 'number.py').read_text())
         self.assertEqual(before, {p.relative_to(parent).as_posix(): p.read_bytes() for p in parent.rglob('*') if p.is_file()})
         state = autonomous.load(self.project, Path(result['run_dir']))
+        jobs = list(Path(result['run_dir']).glob('cells/*/jobs/*/checkpoint.json'))
+        self.assertEqual(len(jobs), 1)
+        task = json.loads(jobs[0].read_text())['task']
+        current_task = task.split('Current cell assignment', 1)[1]
+        self.assertIn('"function":"triple"', current_task)
+        self.assertNotIn('"function":"double"', current_task)
         self.assertTrue(goals.regression_evidence(Path(result['run_dir']), state)['reports'])
         revision = goals.frozen(Path(result['run_dir']), state, 'revision', 'revision.json')
         self.assertEqual(revision['source_cell']['id'], 'double')
@@ -163,6 +169,48 @@ class GoalTests(unittest.TestCase):
         self.assertTrue(observed['ok'], observed['warnings'])
         self.assertEqual(observed['goals'][0]['revision']['source_cell_id'], 'double')
         self.assertEqual(observed['goals'][0]['revision']['parent_run'], str(parent))
+
+    def test_revision_inherits_registry_selection_unless_explicitly_changed(self):
+        state = {'settings': {'worker_config': 'worker.json', 'model': 'fixture',
+                 'base_url': 'http://127.0.0.1:1234/v1', 'registry_assets': ['files.text.read'], 'registry_only': True}}
+        for explicit in (None, ['languages.coding.python.method.fill']):
+            args = argparse.Namespace(run='parent', cell='double', registry_assets=explicit)
+            with patch.object(autonomous, 'load', return_value=state), \
+                    patch.object(goals, 'route_cell', return_value={}), \
+                    patch.object(autonomous, 'start', return_value={'ok': True}) as start:
+                goals.revise(self.project, args, self.worker, self.model)
+                self.assertEqual(start.call_args[0][1].registry_assets,
+                                 explicit if explicit is not None else ['files.text.read'])
+                if explicit is None:
+                    self.assertIsNot(args.registry_assets, state['settings']['registry_assets'])
+                self.assertTrue(args.registry_only)
+
+    def test_revision_brief_keeps_history_out_of_the_current_assignment(self):
+        revision = {'targets': ['number.py'], 'allowed_files': ['number.py', 'consumer.py'],
+            'affected_cells': ['double', 'consumer'],
+            'context': [{'id': 'double', 'result': {'path': 'number.py', 'function': 'double'}}],
+            'source_cell': {'id': 'double', 'files': ['number.py'], 'task': 'OLD IMPERATIVE',
+                'result': {'function': 'double', 'args_json': '[3]'}, 'value': 6,
+                'return_manifest': {'path': 'cells/double/return-manifest.json', 'sha256': 'receipt'}}}
+        current = {'id': 'batch', 'task': 'Add doubles(values); preserve double(n).',
+            'files': ['number.py'], 'result': {'path': 'number.py', 'function': 'doubles',
+                'args_json': '[[1,2]]', 'kwargs_json': '{}',
+                'schema_json': '{"type":"array","enum":[[2,4]]}'}}
+        before = copy.deepcopy(revision)
+        for cell in (None, current):
+            text = goals.brief(revision, current_cell=cell)
+            self.assertNotIn('OLD IMPERATIVE', text)
+            self.assertNotIn('"value":6', text)
+            self.assertIn('preserved_interfaces', text)
+            self.assertIn('cells/double/return-manifest.json', text)
+            self.assertIn('revision.json', text)
+            if cell:
+                self.assertIn('"allowed_files":["number.py"]', text)
+                current_text = text.split('Current cell assignment', 1)[1]
+                self.assertIn('"function":"doubles"', current_text)
+                self.assertNotIn('"function":"double"', current_text)
+        self.assertEqual(revision, before)
+        self.assertEqual(goals.brief(None, current_cell=current), '')
 
     def test_revision_cell_requires_verified_code_cell(self):
         first = self.start()

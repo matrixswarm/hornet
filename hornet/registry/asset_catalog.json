@@ -1,0 +1,1198 @@
+{
+  "version": 2,
+  "assets": [
+    {
+      "uri": "data.json.wrap",
+      "path": "assets/json_forge.py",
+      "type": "TOOL",
+      "version": "2.0.0",
+      "aliases": [
+        "mcp.json_forge"
+      ],
+      "description": "Wrap raw text in a JSON object without hand escaping.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "raw_content": {
+            "type": "string"
+          },
+          "wrap_key": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "raw_content"
+        ],
+        "additionalProperties": false
+      },
+      "examples": [
+        {
+          "raw_content": "hello \"world\"",
+          "wrap_key": "content"
+        }
+      ],
+      "notes": "",
+      "mutates": false
+    },
+    {
+      "uri": "files.text.indent",
+      "path": "assets/precision_indenter.py",
+      "type": "TOOL",
+      "version": "2.1.0",
+      "aliases": [
+        "mcp.precision_indenter"
+      ],
+      "description": "Shift or dedent text; python_body prepares and parses a Python body without guessing nested logic.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string"
+          },
+          "op": {
+            "type": "string",
+            "enum": [
+              "stay",
+              "indent",
+              "outdent",
+              "reset",
+              "python_body"
+            ],
+            "description": "python_body removes a common margin and checks Python body syntax; it never flattens internal nesting."
+          },
+          "lang": {
+            "type": "string",
+            "enum": [
+              "python",
+              "javascript",
+              "json",
+              "yaml",
+              "default"
+            ]
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "additionalProperties": false
+      },
+      "examples": [
+        {
+          "text": "if ok:\n    run()",
+          "op": "indent"
+        },
+        {
+          "text": "    check(value)\n    return value",
+          "op": "python_body",
+          "lang": "python"
+        }
+      ],
+      "notes": "Pure text operation: never reads/writes a project file. python_body is optional: method.fill and method.stage already use the same preparation automatically. A body parse does not establish validity in a specific function or correct behavior; insertion compiles the whole target and acceptance checks verify behavior. reset removes only a common margin; it cannot fix an individual misplaced indent.",
+      "mutates": false
+    },
+    {
+      "uri": "files.text.lines",
+      "path": "assets/radd_file_editor.py",
+      "type": "TOOL",
+      "version": "2.0.0",
+      "aliases": [
+        "mcp.radd_file_editor"
+      ],
+      "description": "Read or edit lines; return source hash. All line numbers are 1-based.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "read_lines",
+              "create_file",
+              "replace_line",
+              "insert_line",
+              "delete_line"
+            ]
+          },
+          "path": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Explicit target file on the MCP server host. Use the assigned goal workspace."
+          },
+          "start": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "end": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "line": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "text": {
+            "type": "string"
+          },
+          "commit": {
+            "type": "boolean",
+            "default": true,
+            "description": "false stages a unique preview; true recomputes and commits this call."
+          },
+          "expected_sha256": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Required to commit an existing-file edit. Copy source_sha256 from a read/preview; stale hashes are rejected."
+          }
+        },
+        "required": [
+          "action",
+          "path"
+        ],
+        "additionalProperties": false
+      },
+      "examples": [
+        {
+          "action": "read_lines",
+          "path": "/assigned/goal/example.py",
+          "start": 1,
+          "end": 20
+        }
+      ],
+      "notes": "read_lines needs start/end only optionally; create_file requires text and refuses overwrite; replace/insert require line and text; delete requires line. Python/JSON edits must remain syntactically valid.",
+      "mutates": true
+    },
+    {
+      "uri": "files.text.atomic_edit",
+      "path": "assets/atomic_editor.py",
+      "type": "TOOL",
+      "version": "2.0.0",
+      "aliases": [
+        "mcp.atomic_editor"
+      ],
+      "description": "Replace one uniquely matched line or insert at a 1-based line. Validate before commit.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Explicit target file on the MCP server host. Use the assigned goal workspace."
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "replace",
+              "insert"
+            ]
+          },
+          "target_text": {
+            "type": "string",
+            "minLength": 1
+          },
+          "new_text": {
+            "type": "string"
+          },
+          "line_number": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "commit": {
+            "type": "boolean",
+            "default": true,
+            "description": "false stages a unique preview; true recomputes and commits this call."
+          },
+          "expected_sha256": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Required to commit an existing-file edit. Copy source_sha256 from a read/preview; stale hashes are rejected."
+          }
+        },
+        "required": [
+          "path",
+          "action",
+          "new_text"
+        ],
+        "additionalProperties": false
+      },
+      "examples": [
+        {
+          "path": "/assigned/goal/example.py",
+          "action": "replace",
+          "target_text": "LIMIT = 1",
+          "new_text": "LIMIT = 2",
+          "commit": false
+        }
+      ],
+      "notes": "replace requires target_text matching exactly one line; insert requires line_number. Replaces the whole matched line.",
+      "mutates": true
+    },
+    {
+      "uri": "runtime.python.probe",
+      "path": "assets/live_probe.py",
+      "type": "TOOL",
+      "version": "2.0.0",
+      "aliases": [
+        "mcp.live_probe"
+      ],
+      "description": "Evaluate a Python expression in a separate interpreter; timeout 5 seconds.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "expression": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "expression"
+        ],
+        "additionalProperties": false
+      },
+      "examples": [
+        {
+          "expression": "sum([1, 2, 3])"
+        }
+      ],
+      "notes": "Executes code with the server user's permissions. Not read-only and not sandboxed.",
+      "mutates": true
+    },
+    {
+      "uri": "runtime.shell.execute",
+      "path": "assets/shell_asset.py",
+      "type": "TOOL",
+      "version": "2.0.0",
+      "aliases": [
+        "mcp.shell"
+      ],
+      "description": "Run a local shell command, returning its exit code and bounded output.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "command": {
+            "type": "string",
+            "minLength": 1
+          },
+          "cwd": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Explicit target file on the MCP server host. Use the assigned goal workspace."
+          },
+          "timeout": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 300
+          }
+        },
+        "required": [
+          "command"
+        ],
+        "additionalProperties": false
+      },
+      "examples": [
+        {
+          "command": "echo registry-ready"
+        }
+      ],
+      "notes": "Uses the server OS shell and user permissions, not an SSH worker or sandbox. Nonzero exit is an error.",
+      "mutates": true
+    },
+    {
+      "uri": "registry.advise",
+      "path": "assets/dispatch_advisor.py",
+      "type": "TOOL",
+      "version": "2.0.0",
+      "aliases": [
+        "mcp.dispatch_advisor"
+      ],
+      "description": "Rank registry tools using words in a goal.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "goal": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "goal"
+        ],
+        "additionalProperties": false
+      },
+      "examples": [
+        {
+          "goal": "edit JSON node"
+        }
+      ],
+      "notes": "Keyword ranking only. Read the recommended tool's schema before calling.",
+      "mutates": false
+    },
+    {
+      "uri": "data.json.query",
+      "path": "assets/json_query.py",
+      "type": "TOOL",
+      "version": "2.0.0",
+      "aliases": [
+        "mcp.json_query"
+      ],
+      "description": "Read JSON or one dot path; distinguish missing paths from null; return source hash.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "file_path": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Explicit target file on the MCP server host. Use the assigned goal workspace."
+          },
+          "target_path": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Dot path with optional nonnegative array indexes: bots[0].status. No dots in literal key names."
+          }
+        },
+        "required": [
+          "file_path"
+        ],
+        "additionalProperties": false
+      },
+      "examples": [
+        {
+          "file_path": "/assigned/goal/manifest.json",
+          "target_path": "bots[0].status"
+        }
+      ],
+      "notes": "",
+      "mutates": false
+    },
+    {
+      "uri": "data.json.edit",
+      "path": "assets/json_surgical_strike.py",
+      "type": "TOOL",
+      "version": "2.0.0",
+      "aliases": [
+        "mcp.json_surgical_strike",
+        "mcp.json_surgical_modification"
+      ],
+      "description": "Set or delete a JSON node with atomic replacement.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "file_path": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Explicit target file on the MCP server host. Use the assigned goal workspace."
+          },
+          "target_path": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Dot path with optional nonnegative array indexes: bots[0].status. No dots in literal key names."
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "set",
+              "delete"
+            ]
+          },
+          "value": {},
+          "commit": {
+            "type": "boolean",
+            "default": true,
+            "description": "false stages a unique preview; true recomputes and commits this call."
+          },
+          "expected_sha256": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Required to commit an existing-file edit. Copy source_sha256 from a read/preview; stale hashes are rejected."
+          }
+        },
+        "required": [
+          "file_path",
+          "target_path"
+        ],
+        "additionalProperties": false
+      },
+      "examples": [
+        {
+          "file_path": "/assigned/goal/manifest.json",
+          "target_path": "bots[0].status",
+          "value": "Ready",
+          "commit": false
+        }
+      ],
+      "notes": "set requires value including explicit null; delete requires an existing path. Intermediate objects may be created; scalars are never silently replaced. Array append only at length, no sparse arrays.",
+      "mutates": true
+    },
+    {
+      "uri": "data.json.batch",
+      "path": "assets/json_batch_strike.py",
+      "type": "TOOL",
+      "version": "2.0.0",
+      "aliases": [
+        "mcp.json_batch_strike",
+        "mcp.json_batch_modification"
+      ],
+      "description": "Apply all JSON operations in memory, then commit once. Any invalid operation aborts.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "file_path": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Explicit target file on the MCP server host. Use the assigned goal workspace."
+          },
+          "operations": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 100,
+            "items": {
+              "type": "object",
+              "properties": {
+                "action": {
+                  "type": "string",
+                  "enum": [
+                    "set",
+                    "delete"
+                  ]
+                },
+                "target_path": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "Dot path with optional nonnegative array indexes: bots[0].status. No dots in literal key names."
+                },
+                "value": {}
+              },
+              "required": [
+                "action",
+                "target_path"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "commit": {
+            "type": "boolean",
+            "default": true,
+            "description": "false stages a unique preview; true recomputes and commits this call."
+          },
+          "expected_sha256": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Required to commit an existing-file edit. Copy source_sha256 from a read/preview; stale hashes are rejected."
+          }
+        },
+        "required": [
+          "file_path",
+          "operations"
+        ],
+        "additionalProperties": false
+      },
+      "examples": [
+        {
+          "file_path": "/assigned/goal/manifest.json",
+          "operations": [
+            {
+              "action": "set",
+              "target_path": "status",
+              "value": "ready"
+            }
+          ],
+          "commit": false
+        }
+      ],
+      "notes": "set requires value. Operations run sequentially, so indexes reflect previous operations. No partial commits.",
+      "mutates": true
+    },
+    {
+      "uri": "data.json.validate_shape",
+      "path": "assets/json_schema_guard.py",
+      "type": "TOOL",
+      "version": "2.0.0",
+      "aliases": [
+        "mcp.json_schema_guard"
+      ],
+      "description": "Validate required keys and exact Python JSON types at an object node.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "file_path": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Explicit target file on the MCP server host. Use the assigned goal workspace."
+          },
+          "target_path": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Dot path with optional nonnegative array indexes: bots[0].status. No dots in literal key names."
+          },
+          "schema": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string",
+              "enum": [
+                "str",
+                "int",
+                "list",
+                "dict",
+                "bool",
+                "float",
+                "null"
+              ]
+            }
+          }
+        },
+        "required": [
+          "file_path",
+          "schema"
+        ],
+        "additionalProperties": false
+      },
+      "examples": [
+        {
+          "file_path": "/assigned/goal/manifest.json",
+          "schema": {
+            "bots": "list",
+            "version": "str"
+          }
+        }
+      ],
+      "notes": "This is a simple shape map, not full JSON Schema. bool does not count as int. Invalid shape returns ERROR.",
+      "mutates": false
+    },
+    {
+      "uri": "data.json.move",
+      "path": "assets/json_migrator.py",
+      "type": "TOOL",
+      "version": "2.0.0",
+      "aliases": [
+        "mcp.json_migrator"
+      ],
+      "description": "Move a JSON node or rename a key, preserving null; refuse overwrites by default.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "file_path": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Explicit target file on the MCP server host. Use the assigned goal workspace."
+          },
+          "migration_type": {
+            "type": "string",
+            "enum": [
+              "move",
+              "rename"
+            ]
+          },
+          "source_path": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Dot path with optional nonnegative array indexes: bots[0].status. No dots in literal key names."
+          },
+          "destination_path": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Dot path with optional nonnegative array indexes: bots[0].status. No dots in literal key names."
+          },
+          "overwrite": {
+            "type": "boolean"
+          },
+          "commit": {
+            "type": "boolean",
+            "default": true,
+            "description": "false stages a unique preview; true recomputes and commits this call."
+          },
+          "expected_sha256": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Required to commit an existing-file edit. Copy source_sha256 from a read/preview; stale hashes are rejected."
+          }
+        },
+        "required": [
+          "file_path",
+          "migration_type",
+          "source_path",
+          "destination_path"
+        ],
+        "additionalProperties": false
+      },
+      "examples": [
+        {
+          "file_path": "/assigned/goal/manifest.json",
+          "migration_type": "rename",
+          "source_path": "status",
+          "destination_path": "state",
+          "commit": false
+        }
+      ],
+      "notes": "rename requires keys in the same object. For move, destination indexes are interpreted AFTER source removal. Ancestor/descendant overlap is rejected.",
+      "mutates": true
+    },
+    {
+      "uri": "data.json.ordered_edit",
+      "path": "assets/macro_json_atomic.py",
+      "type": "TOOL",
+      "version": "2.0.0",
+      "aliases": [
+        "mcp.macro_json_atomic",
+        "macro.json.atomic"
+      ],
+      "description": "Insert an object key before/after an anchor, overwrite, or delete at the JSON root.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Explicit target file on the MCP server host. Use the assigned goal workspace."
+          },
+          "op": {
+            "type": "string",
+            "enum": [
+              "INSERT_BEFORE",
+              "INSERT_AFTER",
+              "OVERWRITE",
+              "DELETE"
+            ]
+          },
+          "anchor": {
+            "type": "string",
+            "minLength": 1
+          },
+          "node": {
+            "type": "string",
+            "minLength": 1
+          },
+          "value": {},
+          "force": {
+            "type": "boolean"
+          },
+          "commit": {
+            "type": "boolean",
+            "default": true,
+            "description": "false stages a unique preview; true recomputes and commits this call."
+          },
+          "expected_sha256": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Required to commit an existing-file edit. Copy source_sha256 from a read/preview; stale hashes are rejected."
+          }
+        },
+        "required": [
+          "path",
+          "node"
+        ],
+        "additionalProperties": false
+      },
+      "examples": [
+        {
+          "path": "/assigned/goal/manifest.json",
+          "op": "INSERT_AFTER",
+          "anchor": "version",
+          "node": "status",
+          "value": "ready",
+          "commit": false
+        }
+      ],
+      "notes": "Insert requires distinct existing anchor and value. Existing node requires force. DELETE requires an existing node. OVERWRITE requires value.",
+      "mutates": true
+    },
+    {
+      "uri": "languages.coding.python.interface.create",
+      "path": "assets/atomic_interface.py",
+      "type": "TOOL",
+      "version": "2.0.0",
+      "aliases": [
+        "mcp.atomic_interface"
+      ],
+      "description": "Create a Python abstract base class contract at an explicit file path.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Explicit target file on the MCP server host. Use the assigned goal workspace."
+          },
+          "class_name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "methods": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Signatures include parentheses; self is inserted when missing. No method bodies here."
+            }
+          },
+          "version": {
+            "type": "string",
+            "minLength": 1
+          },
+          "overwrite": {
+            "type": "boolean"
+          },
+          "commit": {
+            "type": "boolean",
+            "default": true,
+            "description": "false stages a unique preview; true recomputes and commits this call."
+          },
+          "expected_sha256": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Required to commit an existing-file edit. Copy source_sha256 from a read/preview; stale hashes are rejected."
+          }
+        },
+        "required": [
+          "path",
+          "class_name",
+          "methods"
+        ],
+        "additionalProperties": false
+      },
+      "examples": [
+        {
+          "path": "/assigned/goal/strategy.py",
+          "class_name": "CalculationStrategy",
+          "methods": [
+            "execute(a, b)"
+          ],
+          "commit": false
+        }
+      ],
+      "notes": "Parent directory must exist. Existing files require overwrite. Empty methods creates a valid empty ABC.",
+      "mutates": true
+    },
+    {
+      "uri": "languages.coding.python.design_pattern.strategy",
+      "path": "assets/atomic_pattern.py",
+      "type": "TOOL",
+      "version": "2.0.0",
+      "aliases": [
+        "mcp.atomic_pattern"
+      ],
+      "description": "Append a strategy context class to an existing Python module.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Explicit target file on the MCP server host. Use the assigned goal workspace."
+          },
+          "class_name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "pattern": {
+            "type": "string",
+            "enum": [
+              "strategy"
+            ]
+          },
+          "commit": {
+            "type": "boolean",
+            "default": true,
+            "description": "false stages a unique preview; true recomputes and commits this call."
+          },
+          "expected_sha256": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Required to commit an existing-file edit. Copy source_sha256 from a read/preview; stale hashes are rejected."
+          }
+        },
+        "required": [
+          "path",
+          "class_name"
+        ],
+        "additionalProperties": false
+      },
+      "examples": [
+        {
+          "path": "/assigned/goal/strategy.py",
+          "class_name": "CalculationStrategy",
+          "pattern": "strategy",
+          "commit": false
+        }
+      ],
+      "notes": "Adds <class_name>Context; duplicate context names are rejected. Only strategy is implemented.",
+      "mutates": true
+    },
+    {
+      "uri": "languages.coding.python.method.fill",
+      "path": "assets/atomic_body.py",
+      "type": "TOOL",
+      "version": "2.1.0",
+      "aliases": [
+        "mcp.atomic_body"
+      ],
+      "description": "Replace a named Python method body using AST locations; preserve nested indentation.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Explicit target file on the MCP server host. Use the assigned goal workspace."
+          },
+          "method_name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "class_name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "logic": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Complete BODY ONLY, no def/signature. Start body-level statements at column 0; indent only nested suites. Example: check(value)\nreturn value. Preparation, parsing and enclosing-method indentation are automatic."
+          },
+          "commit": {
+            "type": "boolean",
+            "default": true,
+            "description": "false stages a unique preview; true recomputes and commits this call."
+          },
+          "expected_sha256": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Required to commit an existing-file edit. Copy source_sha256 from a read/preview; stale hashes are rejected."
+          }
+        },
+        "required": [
+          "path",
+          "method_name",
+          "logic"
+        ],
+        "additionalProperties": false
+      },
+      "examples": [
+        {
+          "path": "/assigned/goal/basic.py",
+          "class_name": "Basic",
+          "method_name": "execute",
+          "logic": "if a < 0:\n    return 0\nreturn a + b",
+          "commit": false
+        },
+        {
+          "path": "/assigned/goal/basic.py",
+          "class_name": "Basic",
+          "method_name": "execute",
+          "logic": "value = a + b\nreturn value",
+          "commit": false
+        }
+      ],
+      "notes": "Ambiguous methods require class_name. Top-level functions/classes only. Inline one-line methods are rejected. Replaces the complete body including docstring; decorators stay unchanged. Does not turn an ABC into a concrete class. Body preparation is automatic: remove a common margin, parse, add target indentation and compile the entire candidate before any write. Do not indent a sequential return after a check call. Use recipe.precision_formatting for body-format diagnostics.",
+      "mutates": true
+    },
+    {
+      "uri": "languages.coding.python.imports.add",
+      "path": "assets/atomic_import.py",
+      "type": "TOOL",
+      "version": "2.0.0",
+      "aliases": [
+        "mcp.atomic_import"
+      ],
+      "description": "Add unique imports after the module docstring and future imports.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Explicit target file on the MCP server host. Use the assigned goal workspace."
+          },
+          "imports": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "commit": {
+            "type": "boolean",
+            "default": true,
+            "description": "false stages a unique preview; true recomputes and commits this call."
+          },
+          "expected_sha256": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Required to commit an existing-file edit. Copy source_sha256 from a read/preview; stale hashes are rejected."
+          }
+        },
+        "required": [
+          "path",
+          "imports"
+        ],
+        "additionalProperties": false
+      },
+      "examples": [
+        {
+          "path": "/assigned/goal/basic.py",
+          "imports": [
+            "import math"
+          ],
+          "commit": false
+        }
+      ],
+      "notes": "Each item must be one import statement. Adding future imports through this tool is rejected.",
+      "mutates": true
+    },
+    {
+      "uri": "languages.coding.python.interface.stage",
+      "path": "assets/macro_coding_interface.py",
+      "type": "TOOL",
+      "version": "2.0.0",
+      "aliases": [
+        "macro.coding.interface",
+        "mcp.macro_coding_interface"
+      ],
+      "description": "Create an interface from structured method names and arguments; preview by default.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Explicit target file on the MCP server host. Use the assigned goal workspace."
+          },
+          "class_name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "language": {
+            "type": "string",
+            "enum": [
+              "python"
+            ]
+          },
+          "version": {
+            "type": "string",
+            "minLength": 1
+          },
+          "methods": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "args": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "name"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "overwrite": {
+            "type": "boolean"
+          },
+          "commit": {
+            "type": "boolean",
+            "default": false
+          },
+          "expected_sha256": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Required to commit an existing-file edit. Copy source_sha256 from a read/preview; stale hashes are rejected."
+          }
+        },
+        "required": [
+          "path",
+          "class_name",
+          "methods"
+        ],
+        "additionalProperties": false
+      },
+      "examples": [
+        {
+          "path": "/assigned/goal/strategy.py",
+          "class_name": "CalculationStrategy",
+          "methods": [
+            {
+              "name": "execute",
+              "args": "a, b"
+            }
+          ]
+        }
+      ],
+      "notes": "Requires an explicit path now; no global language-version directory writes.",
+      "mutates": true
+    },
+    {
+      "uri": "languages.coding.python.design_pattern.stage",
+      "path": "assets/macro_coding_pattern.py",
+      "type": "TOOL",
+      "version": "2.0.0",
+      "aliases": [
+        "macro.coding.pattern",
+        "mcp.macro_coding_pattern"
+      ],
+      "description": "Preview strategy-context injection; commit only when requested.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Explicit target file on the MCP server host. Use the assigned goal workspace."
+          },
+          "class_name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "pattern": {
+            "type": "string",
+            "enum": [
+              "strategy"
+            ]
+          },
+          "commit": {
+            "type": "boolean",
+            "default": false
+          },
+          "expected_sha256": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Required to commit an existing-file edit. Copy source_sha256 from a read/preview; stale hashes are rejected."
+          }
+        },
+        "required": [
+          "path"
+        ],
+        "additionalProperties": false
+      },
+      "examples": [
+        {
+          "path": "/assigned/goal/strategy.py",
+          "class_name": "CalculationStrategy"
+        }
+      ],
+      "notes": "Default context name is StrategyContext.",
+      "mutates": true
+    },
+    {
+      "uri": "languages.coding.python.method.stage",
+      "path": "assets/macro_coding_body.py",
+      "type": "TOOL",
+      "version": "2.1.0",
+      "aliases": [
+        "macro.coding.body",
+        "mcp.macro_coding_body"
+      ],
+      "description": "Preview a named method-body replacement; preserve nested indentation.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Explicit target file on the MCP server host. Use the assigned goal workspace."
+          },
+          "method_name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "class_name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "new_body": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Complete BODY ONLY, no def/signature. Start body-level statements at column 0; indent only nested suites. Example: check(value)\nreturn value. Preparation, parsing and enclosing-method indentation are automatic."
+          },
+          "commit": {
+            "type": "boolean",
+            "default": false
+          },
+          "expected_sha256": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Required to commit an existing-file edit. Copy source_sha256 from a read/preview; stale hashes are rejected."
+          }
+        },
+        "required": [
+          "path",
+          "method_name",
+          "new_body"
+        ],
+        "additionalProperties": false
+      },
+      "examples": [
+        {
+          "path": "/assigned/goal/basic.py",
+          "class_name": "Basic",
+          "method_name": "execute",
+          "new_body": "return a + b"
+        },
+        {
+          "path": "/assigned/goal/basic.py",
+          "class_name": "Basic",
+          "method_name": "execute",
+          "new_body": "value = a + b\nreturn value",
+          "commit": false
+        }
+      ],
+      "notes": "Same target selection rules as method.fill. Body preparation is automatic: remove a common margin, parse, add target indentation and compile the entire candidate before any write. Do not indent a sequential return after a check call. Use recipe.precision_formatting for body-format diagnostics.",
+      "mutates": true
+    },
+    {
+      "uri": "recipe.atomic_commit",
+      "path": "recipes/atomic_commit_recipe.json",
+      "type": "RECIPE",
+      "version": "2.0.0",
+      "aliases": [],
+      "description": "Read, preview, verify, commit and read back one file."
+    },
+    {
+      "uri": "recipe.precision_formatting",
+      "path": "recipes/precision_formatting_recipe.json",
+      "type": "RECIPE",
+      "version": "2.1.0",
+      "aliases": [],
+      "description": "Prepare, validate and insert Python method bodies; diagnose indentation without guessing internal nesting."
+    },
+    {
+      "uri": "files.text.read",
+      "path": "assets/read_lines.py",
+      "type": "TOOL",
+      "version": "2.0.0",
+      "aliases": [],
+      "description": "Read UTF-8 file lines and return source_sha256. Read-only; cannot edit. Lines are 1-based inclusive.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "minLength": 1
+          },
+          "start": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "end": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "required": [
+          "path"
+        ],
+        "additionalProperties": false
+      },
+      "examples": [
+        {
+          "path": "/assigned/goal/example.py",
+          "start": 1,
+          "end": 20
+        }
+      ],
+      "notes": "Prefer this tool for reading before an edit; it has no action parameter. Use bounded ranges for large files.",
+      "mutates": false
+    }
+  ]
+}

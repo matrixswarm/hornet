@@ -81,6 +81,9 @@ class ResearchTests(unittest.TestCase):
         self.assertIs(result['values']['check-even'], False)
         packet = mission.read(self.run_dir() / 'cells/check-even/work-packet.json')
         self.assertEqual(packet['dependencies']['inspect']['value'], json.loads(self.finding['value_json']))
+        self.assertEqual(self.args.context_chars, 16000)
+        self.assertNotIn('interfaces', packet['dependency_context'])
+        self.assertNotIn('dependency_interfaces', state['cells']['check-even'])
         self.assertEqual(mission.read(self.run_dir() / 'cells/inspect/work-packet.json')['permissions']['write_files'], [])
 
     def stop_after_research(self):

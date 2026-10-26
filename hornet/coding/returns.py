@@ -68,6 +68,8 @@ def compose(project, run, state, cell, recorded_attempt):
     record = state['cells'][cell['id']]
     job_run = child_path(run, cell, record)
     job = session.load(project, job_run)
+    if state['settings'].get('registry_only') and not job['settings'].get('registry_only'):
+        raise HornetError('Cell lost its required registry-only policy')
     if tree.enabled(state) and job.get('context_window') != tree.LIMITS['recent_exchanges']:
         raise HornetError('Cell working context policy changed')
     result = read(job_run / 'result.json')
@@ -129,6 +131,20 @@ def compose(project, run, state, cell, recorded_attempt):
             'frozen_checks': artifact(run, run / 'cells' / cell['id'] / 'acceptance.json')}}
     if state['schema_version'] >= 3:
         receipt['goal'] = mission.binding(state, cell)
+    if job.get('registry_binding'):
+        receipt['provenance']['registry'] = {
+            'binding': job['registry_binding'],
+            'calls': [{'call_id': e['call_id'], 'tool': e['tool'],
+                       'uri': e['result'].get('uri') or e['result'].get('asset', {}).get('uri'),
+                       'ok': e['result']['ok'], 'status': e['result'].get('status'),
+                       'receipt': artifact(run, job_run / e['result']['registry_receipt']['path']),
+                       'readback': artifact(run, job_run / e['result']['readback_receipt']['path'])
+                                   if e['result'].get('readback_receipt') else None,
+                       'operation': artifact(run, job_run / 'operations' / (e['operation_id'] + '.json'))
+                                    if e.get('operation_id') else None}
+                      for e in job['history'] if 'registry_receipt' in e.get('result', {})]}
+        if job['settings'].get('registry_only'):
+            receipt['provenance']['registry']['required'] = True
     return receipt
 
 

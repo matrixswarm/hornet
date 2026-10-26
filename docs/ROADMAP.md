@@ -1,7 +1,15 @@
 # Hornet roadmap
 
-Updated 2026-10-24. Released milestones and current development are distinguished
+Updated 2026-10-26. Released milestones and current development are distinguished
 from planned capabilities below.
+
+## 0.18.0: registry integration into coding cells
+
+Version 0.18.0 packages the repaired registry and connects reviewed
+file transformations to cell scope, operation receipts, resume validation and
+return manifests. See [the registry guide](REGISTRY.md) for canonical namespaces,
+the agent procedure, extension rules and current limits. The broader builder
+submission/assembly lifecycle remains planned. See the release page for publication status.
 
 ## Completed: setup and contract-review maintenance release
 

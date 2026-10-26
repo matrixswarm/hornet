@@ -12,14 +12,15 @@ from urllib.parse import urlsplit
 
 from hornet.project import HornetError, write_text
 from hornet import hive
-from .agent import DEFAULT_NAMES, NAMES, SYSTEM, TOOLS, change_state, tool_result_content, validate_call
-from . import acceptance, ticket, read_refs, workspaces, operations, questions, activity, recovery
+from .agent import DEFAULT_NAMES, NAMES, TOOLS, change_state, system_prompt, tool_result_content, validate_call
+from . import acceptance, ticket, read_refs, workspaces, operations, questions, activity, recovery, registry
 from .context import focus_messages
 from .locking import WorkerLock
 from .model import completion, lmstudio_json
 from .transport import SSHWorker
 
-READ_ONLY = {"list_files", "read_file", "search", "diff"}
+READ_ONLY = {"list_files", "read_file", "search", "diff"} | (registry.NAMES - {'call_proxy_tool'})
+REGISTRY_BYPASSES = {'edit_file', 'write_file', 'run_command', 'run_python'}
 PHASES = {"model", "model_request", "dispatch", "tool_in_flight", "final_tests", "verification_in_flight", "complete", "waiting_for_user"}
 
 
@@ -51,6 +52,12 @@ def settings(args, project=None, *, max_turns_cap=30):
         tools=sorted(getattr(args, "tools", None) or DEFAULT_NAMES), max_repairs=getattr(args, "max_repairs", 2))
     if getattr(args, 'workspace', None) is not None:
         value['workspace'] = workspaces.identifier(args.workspace)
+    if getattr(args, 'registry_assets', None) is not None:
+        value['registry_assets'] = sorted(set(args.registry_assets))
+    if getattr(args, 'registry_only', None) is not None:
+        value['registry_only'] = args.registry_only
+        if args.registry_only is True:
+            value['tools'] = sorted((set(value['tools']) | registry.NAMES) - REGISTRY_BYPASSES)
     if project is not None:
         hive.configure(project, args, value)
     validate_settings(value, max_turns_cap=max_turns_cap)
@@ -58,9 +65,21 @@ def settings(args, project=None, *, max_turns_cap=30):
 
 
 def validate_settings(value, *, max_turns_cap=30):
+    if 'registry_only' in value and type(value['registry_only']) is not bool:
+        raise HornetError('Registry-only policy must be a boolean')
+    if value.get('registry_only') and (set(value.get('tools', [])) & REGISTRY_BYPASSES
+                                    or not registry.NAMES <= set(value.get('tools', []))):
+        raise HornetError('Registry-only policy requires discovery tools and forbids direct writes or execution')
+    if 'registry_assets' in value:
+        if not isinstance(value['registry_assets'], list) or not value['registry_assets']:
+            raise HornetError('Registry selection must contain at least one reviewed cell asset')
+        try:
+            registry.manager(value['registry_assets'])
+        except (ValueError, TypeError) as exc:
+            raise HornetError(str(exc)) from None
     if value.get('hive') is not None:
-        registry = hive.validate_binding(value['hive'])
-        profile = registry['agents'][value['hive']['agent']]
+        hive_registry = hive.validate_binding(value['hive'])
+        profile = hive_registry['agents'][value['hive']['agent']]
         if any(value.get(key) != profile[key] for key in ('model', 'base_url', 'protocol')):
             raise HornetError('Saved model settings differ from the named hive agent')
     if value.get('workspace') is not None:
@@ -127,6 +146,9 @@ def load(project, run):
                 if type(job[key]) is not int or not 0 <= job[key] <= 100:
                     raise ValueError("Invalid verification counters")
         validate_settings(job["settings"])
+        if job['settings'].get('registry_only') and any(
+                entry.get('tool') in REGISTRY_BYPASSES for entry in job['history']):
+            raise ValueError('Registry-only history contains a direct write or execution')
         if job.get('context_window') is not None and (type(job['context_window']) is not int or job['context_window'] != 2):
             raise ValueError('Invalid fixed working context window')
         for call in job["pending"]:
@@ -145,11 +167,25 @@ def load(project, run):
             if questions.resolution(item['reference'], publish_missing=False) != item['answer']:
                 raise ValueError('Saved question answer changed')
         read_refs.observations(job)
+        if job.get('registry_binding') is not None:
+            registry.check_binding(job['registry_binding'])
+            registry.validate_history(run, job)
+            if job.get('prepared_registry'):
+                registry.read_record(run, job['prepared_registry'], job, job['pending'][0])
+            elif job['phase'] == 'tool_in_flight' and validate_call(job['pending'][0])[0] in registry.NAMES:
+                raise ValueError('Missing in-flight registry preparation')
+        elif set(job['settings']['tools']) & registry.NAMES:
+            raise ValueError('Missing registry cell permissions')
         active = job.get('in_flight_operation')
         if active is not None:
             tool, arguments = validate_call(job['pending'][0])
             if tool in {'write_file', 'edit_file'}:
                 arguments = read_refs.resolve(job, arguments)
+            if tool in registry.NAMES:
+                prepared = registry.read_record(run, job['prepared_registry'], job, job['pending'][0])
+                if prepared['operation'] is None:
+                    raise ValueError('Read-only registry call cannot own a write receipt')
+                tool, arguments = 'write_file', prepared['operation']
             operations.validate_checkpoint(job, tool, arguments)
         elif job.get('operation_protocol') not in (None, 1):
             raise ValueError('Unknown operation receipt protocol')
@@ -181,7 +217,7 @@ def work(project, args, worker=None, request_model=None, boundary=None):
         job = {"schema_version": 2, "job_id": uuid.uuid4().hex, "project_root": str(project.root),
             "run_dir": str(run), "task": task, "settings": config, "snapshot": current,
             "initial_state": change_state(initial.get("files", [])), "phase": "model", "pending": [],
-            "messages": [{"role": "system", "content": SYSTEM + acceptance.brief(plan)}, {"role": "user", "content": task}],
+            "messages": [{"role": "system", "content": system_prompt(config.get('registry_only')) + acceptance.brief(plan)}, {"role": "user", "content": task}],
             "history": [], "seen_ids": [], "turns_used": 0, "tools_used": 0, "attempts": 0,
             "acceptance": plan, "acceptance_sha256": acceptance.digest(plan) if plan else None,
             "verification_rounds": 0, "repairs_used": 0}
@@ -193,6 +229,13 @@ def work(project, args, worker=None, request_model=None, boundary=None):
             job['operation_protocol'] = 1
         if getattr(worker, 'question_scope', None) is not None:
             job['question_scope'] = dict(worker.question_scope)
+        if set(config['tools']) & registry.NAMES:
+            job['registry_binding'] = registry.binding(worker)
+            job['messages'][0]['content'] += '\n' + registry.GUIDE
+        if config.get('registry_only'):
+            job['messages'][0]['content'] += ('\nThis job requires registry edits. Direct write/edit and arbitrary execution tools '
+                'are unavailable. Discover an operation, inspect its contract, then use call_proxy_tool. '
+                'If no allowed operation fits, report that limitation; do not invent a bypass.')
         write_text(run / "task.txt", task)
         write_text(run / "initial-changes.json", json.dumps(initial, ensure_ascii=False, indent=2))
         if plan is not None:
@@ -221,6 +264,8 @@ def resume(project, args, worker=None, request_model=None, boundary=None):
         if job["phase"] == "complete":
             raise HornetError("This job already completed")
         ready(worker)
+        if job.get('registry_binding'):
+            registry.check_binding(job['registry_binding'], worker)
         current = snapshot(worker)
         checks = {"observed_at": now(), "same_worker": current["binding"] == job["snapshot"]["binding"],
                   "same_files": current["files"] == job["snapshot"]["files"], "recovered_lock": lock.previous}
@@ -230,8 +275,10 @@ def resume(project, args, worker=None, request_model=None, boundary=None):
         if not checks["same_worker"]:
             raise HornetError("Resume refused: worker identity, pinned connection, or Git baseline changed")
         active = job.get('in_flight_operation')
+        registry_read = (job.get('prepared_registry') and
+                         registry.read_record(run, job['prepared_registry'], job, job['pending'][0])['operation'] is None)
         if job["phase"] == "verification_in_flight" or (job["phase"] == "tool_in_flight" and
-                validate_call(job["pending"][0])[0] not in READ_ONLY and active is None):
+                validate_call(job["pending"][0])[0] not in READ_ONLY and active is None and not registry_read):
             raise HornetError("Resume paused: a command or edit was in flight and its outcome is unknown. Inspect the worker and checkpoint; it will not be replayed")
         if not checks["same_files"] and active is None:
             raise HornetError("Resume refused: workspace files changed since the last confirmed step: " + ", ".join(checks["changed_paths"][:8]))
@@ -260,7 +307,7 @@ def resume(project, args, worker=None, request_model=None, boundary=None):
             call = job['pending'][0]
             name, arguments = validate_call(call)
             stop_repeating = finish_operation(job, call, name, arguments, result, current,
-                active['arguments'] if name in {'edit_file', 'write_file'} else None)
+                active['arguments'] if name in {'edit_file', 'write_file'} or name in registry.NAMES else None, run, worker)
             job['history'].append({'operation_recovered': active['id'], 'observed_at': now()})
             save(run, job)
             if stop_repeating:
@@ -268,11 +315,17 @@ def resume(project, args, worker=None, request_model=None, boundary=None):
         if job["phase"] == "model_request":
             job["phase"] = "model"  # A lost model reply never executed a tool.
         if job["phase"] == "tool_in_flight":
-            call = job["pending"].pop(0)
+            call = job["pending"][0]
             name, arguments = validate_call(call)
-            observe(job, call, name, arguments, {"ok": False, "interrupted": True,
-                "error": "Read-only result was lost. Request it again if needed; no operation was replayed."})
-            job["phase"] = "dispatch" if job["pending"] else "model"
+            if registry_read:
+                prepared = registry.read_record(run, job['prepared_registry'], job, call)
+                finish_operation(job, call, name, arguments, prepared['result'], current, run=run)
+                job['history'].append({'registry_observation_recovered': call['id'], 'observed_at': now()})
+            else:
+                job['pending'].pop(0)
+                observe(job, call, name, arguments, {"ok": False, "interrupted": True,
+                    "error": "Read-only result was lost. Request it again if needed; no operation was replayed."})
+                job["phase"] = "dispatch" if job["pending"] else "model"
         # Windows are per attempt; the full operation history remains intact.
         job.pop('stagnation_window', None)
         job.pop('stagnated', None)
@@ -343,16 +396,40 @@ def repeated_edit(job, name, arguments, result, changed):
     return job["repeated_edit"]["count"] >= 3
 
 
-def finish_operation(job, call, name, arguments, result, current, dispatched=None):
+def finish_operation(job, call, name, arguments, result, current, dispatched=None, run=None, worker=None):
     if current['binding'] != job['snapshot']['binding']:
         raise HornetError('Worker identity changed during an operation')
     if name == 'read_file':
         result = read_refs.issue(job, call, arguments, result, current)
+    if name in registry.NAMES and job.get('prepared_registry'):
+        reference = job['prepared_registry']
+        prepared = registry.read_record(run, reference, job, call)
+        readback = None
+        if prepared['operation'] is not None and result.get('ok'):
+            if worker is None:
+                raise HornetError('A confirmed registry commit requires independent worker readback')
+            registry.finish(prepared, result)  # Check acknowledgement before observing bytes.
+            readback = registry.confirm_commit(run, job, call, prepared, worker, current, snapshot)
+        result = dict(registry.finish(prepared, result, readback), registry_receipt=reference)
+        job.pop('prepared_registry')
     observe(job, call, name, arguments, result, dispatched)
     active = job.pop('in_flight_operation', None)
     if active is not None:
         job['history'][-1]['operation_id'] = active['id']
+        if name in registry.NAMES:
+            job['history'][-1]['dispatched_tool'] = 'write_file'
+            # The worker receipt contains its write result; retain the outer
+            # registry result separately and validate both on resume.
+            job['history'][-1]['operation_result'] = result['worker_result']
     stop = repeated_edit(job, name, arguments, result, current['files'] != job['snapshot']['files'])
+    if name in registry.NAMES:
+        signature = registry.failure_signature(name, arguments, current, job)
+        failures = job.setdefault('registry_failures', {})
+        if result.get('ok'):
+            failures.pop(signature, None)
+        else:
+            failures[signature] = failures.get(signature, 0) + 1
+            stop = stop or failures[signature] >= 3
     stagnated = recovery.observe(job, name, arguments, current)
     if stagnated or stop and job.get('detect_stagnation'):
         job['stagnated'] = True
@@ -432,14 +509,15 @@ def _attempt(run, job, worker, request_model, boundary=None):
                 if job.get('answered_questions'):
                     messages[1]['content'] += '\nUser clarifications (preserve existing constraints): ' + json.dumps([
                         questions.tool_result(item['reference'], item['answer']) for item in job['answered_questions']])
-                active, context = focus_messages(messages, selected, job["history"], config.context_chars,
+                offered = registry.offered_tools(selected, job) if job.get('registry_binding') else selected
+                active, context = focus_messages(messages, offered, job["history"], config.context_chars,
                                                   job.get('context_window'))
                 job["turns_used"] += 1
                 job["phase"] = "model_request"
                 save(run, job)
                 progress("model_request", turn=job["turns_used"], tools_used=job["tools_used"], **context)
                 try:
-                    message, stats = request_model(active, selected, config.model, config.base_url, config.max_tokens, config.timeout)
+                    message, stats = request_model(active, offered, config.model, config.base_url, config.max_tokens, config.timeout)
                 except hive.AgentBusy:
                     job['turns_used'] -= 1
                     job['phase'] = 'model'
@@ -491,6 +569,18 @@ def _attempt(run, job, worker, request_model, boundary=None):
                     raise HornetError("Repeated unsuccessful edit refused; inspect the current source and change the approach")
                 dispatched = None
                 invalid_edit = None
+                registry_result = None
+                actual_name = name
+                if name in registry.NAMES:
+                    try:
+                        registry_result, dispatched = registry.prepare(worker, name, arguments,
+                            job['registry_binding'], job['snapshot'], registry.inspected(job), job=job)
+                        if dispatched is not None and not operations.supported(worker, 'write_file', dispatched):
+                            raise ValueError('Registry commits require a durable worker with permission to write this file')
+                    except (ValueError, OSError, TypeError, KeyError) as exc:
+                        registry_result, dispatched = {'ok': False, 'status': 'ERROR', 'error': str(exc)}, None
+                    job['prepared_registry'] = registry.record(run, job, call, registry_result, dispatched)
+                    actual_name = 'write_file' if dispatched is not None else name
                 if name in {'edit_file', 'write_file'}:
                     try:
                         dispatched = read_refs.resolve(job, arguments)
@@ -498,14 +588,16 @@ def _attempt(run, job, worker, request_model, boundary=None):
                         invalid_edit = {'ok': False, 'error': str(exc)}
                 actual = dispatched if dispatched is not None else arguments
                 if (invalid_edit is None and job.get('operation_protocol') == 1
-                        and operations.supported(worker, name, actual)):
-                    job['in_flight_operation'] = operations.request(job, name, actual)
+                        and operations.supported(worker, actual_name, actual)):
+                    job['in_flight_operation'] = operations.request(job, actual_name, actual)
                 job["tools_used"] += 1
                 job["phase"] = "tool_in_flight"
                 save(run, job)
                 progress("worker_tool", turn=job["turns_used"], tool=name, tools_used=job["tools_used"])
                 if job.get('in_flight_operation') is not None:
                     result, current = operations.invoke(run, worker, job['in_flight_operation'], snapshot)
+                elif name in registry.NAMES:
+                    result, current = registry_result, snapshot(worker)
                 elif name == "check_ticket":
                     relative = "ticket-checks/{}/result.json".format(job["tools_used"])
                     result, current = ticket.check(worker, job["acceptance"], job["snapshot"],
@@ -530,7 +622,7 @@ def _attempt(run, job, worker, request_model, boundary=None):
                 else:
                     result = worker.call(name, arguments)
                     current = snapshot(worker)
-                stop_repeating = finish_operation(job, call, name, arguments, result, current, dispatched)
+                stop_repeating = finish_operation(job, call, name, arguments, result, current, dispatched, run, worker)
                 save(run, job)
                 action('tool_returned', name)
                 if stop_repeating:
@@ -538,6 +630,12 @@ def _attempt(run, job, worker, request_model, boundary=None):
                         raise recovery.Stagnated('Repeated operations on unchanged source; request a bounded fresh-context handoff')
                     raise HornetError("Stopped after three identical unsuccessful edits; inspect the current source and change the approach")
             elif job["phase"] == "final_tests":
+                pending_reads = registry.pending_readbacks(job) if job.get('registry_binding') else []
+                if pending_reads:
+                    job['messages'].append({'role': 'user', 'content': 'Completion check: read back the current committed files before finishing: ' + ', '.join(pending_reads) + '. Then run check_ticket if offered.'})
+                    job['phase'] = 'model'
+                    save(run, job)
+                    continue
                 job["verification_rounds"] += 1
                 verification = run / "verification" / str(job["verification_rounds"])
                 verification.mkdir(parents=True, exist_ok=True)

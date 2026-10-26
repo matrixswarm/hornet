@@ -25,7 +25,7 @@ configure a worker VM and connect your local model for coding goals.
 
 ## Try one completed goal
 
-1. Open the [v0.17.0 release](https://github.com/matrixswarm/hornet/releases/tag/v0.17.0).
+1. Open the [latest signed release](https://github.com/matrixswarm/hornet/releases/latest).
 2. Download the **starter ZIP**, `SHA256SUMS`, `SHA256SUMS.asc`, the public signing
    key and `VERIFY-RELEASE.md`.
 3. Verify the download, extract it, and follow **START-HERE.md** inside.
@@ -69,6 +69,22 @@ In 0.17.0, explicitly enroll saved goals for bounded automatic resume. The
 periodic scan uses no inference and respects pauses, questions, active workers
 and remaining budgets. Each activation leaves a receipt; uncertain outcomes
 stay stopped for inspection. See [the supervisor guide](docs/SUPERVISOR.md).
+
+## Discoverable tools for coding cells
+
+Hornet 0.18.0 adds a [cell tool registry](docs/REGISTRY.md). Agents discover a
+capability, inspect its exact contract, apply a scoped transformation, and retain
+write and readback receipts. Use `--registry-only` to require these tools for edits:
+
+```console
+hornet autowork --worker-config coding/worker.json --agent gemma --scope-file calculator.py --registry-only --goal "Fix integer doubling and preserve the public interface."
+```
+
+Replace `gemma` with your configured hive label. The registry offers 17 reviewed
+cell tools for Python, JSON and text, plus two recipes. The controller checks
+source hashes, enforces file scope, and runs the cell and goal acceptance checks.
+See [the registry guide](docs/REGISTRY.md) for namespaces, discovery, extension
+rules and the standalone MCP server.
 
 ## Questions wait for you
 
@@ -119,13 +135,13 @@ Our publishing workflow verifies the signed GitHub package files before uploadin
 those same bytes to PyPI. See the [CLI reference](https://github.com/matrixswarm/hornet/blob/main/docs/CLI.md)
 for goals, revisions, contracts and recovery commands.
 
-### Upgrading from 0.16.0
+### Upgrading
 
-Version 0.16.1 fixes ambiguous contract-review instructions and adds Linux host
-setup and stronger worker preflight. Install the new version in a separate
-environment and use its matching starter for a new worker. Preserve the old
-environment, VM, keys and saved goals together: the new controller refuses
-mismatched worker code, and this release does not migrate existing deployments.
+Install the new version in a separate environment and use its matching starter
+for a new worker. Preserve the old environment, VM, keys and saved goals together.
+Worker code and registry bindings are checked when loading saved work, including
+completed cells and linked revisions. This release does not migrate existing
+deployments or registry bindings.
 
 ## Project
 

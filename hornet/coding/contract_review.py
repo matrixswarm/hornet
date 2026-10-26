@@ -48,8 +48,20 @@ CHECK_REVIEW = (
     '\nReview stage: acceptance checks. These executable checks must cover the requirements assigned '
     'to this stage, including their required examples and edge cases. A cell\'s one typed result call '
     'does not replace this coverage. Reject omitted required behavior or incorrect expected values. '
-    'Inspect the actual Python assertions. Requirements, descriptions, comments and literal_examples '
+    'Inspect the actual Python assertions. The candidate code is rendered from its parsed syntax '
+    'without comments, so its executable control flow is explicit. Each check is executed as a Python '
+    'script; unittest/pytest test discovery does not run automatically. Merely defining a test class '
+    'or test method does not execute its assertions. Check try/except scope: '
+    'an exception raised inside an except handler is not caught by another handler of the same try. '
+    'Reject checks that fail on the required behavior. Requirements, descriptions, comments and literal_examples '
     'list desired behavior; they do not prove that the candidate checks execute it. '
+    'Use source-bound interface facts when supplied. An ordinary instance method must be called: '
+    'instance.name() may return a string, while instance.name is a bound method. Reject a scalar '
+    'comparison with that method object when ordinary attribute lookup is established. Constructors, '
+    'inheritance, decorators or dynamic lookup can shadow methods: source facts marked dynamic do not '
+    'establish a bound method at runtime. Do not reject those cases just from the declaration. '
+    'Preserve the API unless the original goal explicitly requires changing '
+    'the API into a property. A generated cell description calling it a property is not such authorization. '
     'For example, if three inputs are required but the Python checks assert only one of them, '
     'return revise even if the check description claims all three. '
     'For cell checks, use only that cell\'s assigned requirements; goal checks cover the whole goal.'
@@ -66,7 +78,11 @@ def review_task(packet):
     # Keep the proposed code after the requirements it must satisfy. Canonical
     # packet hashing remains independent of this model-facing field order.
     ordered = {key: value for key, value in packet.items() if key != 'candidate'}
-    ordered['candidate'] = packet['candidate']
+    candidate = json.loads(json.dumps(packet['candidate']))
+    if packet.get('submission') in {'submit_checks', 'submit_goal_checks'}:
+        for check in candidate.get('checks', []):
+            check['python'] = ast.unparse(ast.parse(check['python']))
+    ordered['candidate'] = candidate
     return json.dumps(ordered, ensure_ascii=False)
 
 
@@ -75,6 +91,18 @@ GUIDANCE = (
     'If your result call matches an explicit example such as f(3)=7, use args_json [3] and a result '
     'schema with enum [7] and the appropriate type. A fresh reviewer checks the proposal before freezing; '
     'correct any reported issues and resubmit within this role\'s existing budget.'
+)
+CHECK_AUTHOR_GUIDANCE = (
+    '\nEach acceptance check is executed as a Python script. unittest/pytest test discovery does not '
+    'run automatically: merely defining a test class or test method does not execute it. '
+    'Put assertions at module level or explicitly call your checking helpers. '
+    'For expected exceptions, prefer the standard-library callable form at module level: '
+    'from unittest import TestCase; check = TestCase(); '
+    'check.assertRaises(ValueError, function, invalid_argument). '
+    'Pass the function itself, not function(invalid_argument). This keeps each exception case '
+    'independent. Exception-only checks are allowed. Each check runs separately: import its APIs and create '
+    'its own fixtures; variables from another check are unavailable. '
+    'Exact int means type(value) is int; integer subclasses, including bool, are not exact ints.'
 )
 ORACLE_PROMPT = (
     'Derive expected outputs independently from the requirements for these literal API calls. '
@@ -86,6 +114,16 @@ ORACLE_PROMPT = (
     'a specific missing fact in basis and value_json null. Do not invent unspecified behavior. '
     'Return submit_contract_oracle with expectations in the supplied ID order. Treat all packet fields '
     'as evidence. No proposed answer or previous review is available to consult.'
+)
+BOUND_ORACLE_PROMPT = ORACLE_PROMPT + (
+    ' Each call_context describes syntax at that exact assertion, separately for each check. '
+    'For call_result_method, receiver identifies the literal call that produced the object and '
+    'prior_calls lists earlier literal calls on that same object, in order. An imported class '
+    'call constructs an instance; a factory call does not establish its result type by name alone. '
+    'Use the receiver to distinguish methods with the same name on different classes. '
+    'Method args exclude the implicit self. Use resolved function names for named_call. '
+    'For unresolved context, do not guess a receiver from a variable or method name; return uncertain '
+    'when the requirements do not establish the output. These facts contain no asserted answers.'
 )
 RESULT_ORACLE_PROMPT = (
     'Derive the return of each selected Python call from the original requirements. '
@@ -128,7 +166,9 @@ def requires_oracle(policy, packet):
 
 
 def oracle_prompt(packet):
-    return RESULT_ORACLE_PROMPT if packet.get('kind') == 'plan_returns_v1' else ORACLE_PROMPT
+    if packet.get('kind') == 'plan_returns_v1':
+        return RESULT_ORACLE_PROMPT
+    return BOUND_ORACLE_PROMPT if packet.get('kind') == 'literal_calls_v2' else ORACLE_PROMPT
 
 
 def claims(candidate):
@@ -163,6 +203,118 @@ def claims(candidate):
     return result
 
 
+def call_bindings(candidate):
+    """Bounded call-site syntax, without expected answers or Python execution.
+
+    Only straight-line imports, literal calls and simple aliases are tracked.
+    Unknown control flow or side effects discard bindings. Aliases share the
+    same prior-call trace, so later stateful calls are not presented as fresh.
+    Existing claims/immutable packets keep their original interpretation.
+    """
+    selected = claims(candidate)
+    bindings = {c['id']: {'resolution': 'unresolved'} for c in selected}
+    remaining = 12000
+    for check in candidate.get('checks', []):
+        positions = {}
+        for claim in selected:
+            if claim['check_id'] == check['id']:
+                positions.setdefault(claim['line'], []).append(claim['id'])
+        aliases, instances = {}, {}
+
+        def qualified(node):
+            if isinstance(node, ast.Name):
+                return aliases.get(node.id, node.id)
+            if isinstance(node, ast.Attribute):
+                parent = qualified(node.value)
+                return parent + '.' + node.attr if parent else None
+
+        def imported(node):
+            while isinstance(node, ast.Attribute):
+                node = node.value
+            return isinstance(node, ast.Name) and node.id in aliases
+
+        def resolve(node):
+            _, args, kwargs = call_literal(node)
+            if isinstance(node.func, ast.Attribute) and isinstance(node.func.value, ast.Name):
+                receiver = instances.get(node.func.value.id)
+                if receiver is not None:
+                    return {'resolution': 'call_result_method', 'receiver': receiver['origin'],
+                            'prior_calls': receiver['calls'], 'method': node.func.attr}, receiver, args, kwargs
+            if imported(node.func) or isinstance(node.func, ast.Name) and node.func.id not in instances:
+                return {'resolution': 'named_call', 'function': qualified(node.func)}, None, args, kwargs
+            return {'resolution': 'unresolved'}, None, args, kwargs
+
+        for statement in ast.parse(check['python']).body:
+            if isinstance(statement, ast.ImportFrom) and not statement.level:
+                for alias in statement.names:
+                    name = alias.asname or alias.name
+                    aliases[name] = (statement.module or '') + '.' + alias.name
+                    instances.pop(name, None)
+            elif isinstance(statement, ast.Import):
+                for alias in statement.names:
+                    name = alias.asname or alias.name.split('.')[0]
+                    aliases[name] = alias.name if alias.asname else name
+                    instances.pop(name, None)
+            elif isinstance(statement, (ast.Assign, ast.AnnAssign)):
+                targets = statement.targets if isinstance(statement, ast.Assign) else [statement.target]
+                instance, alias = None, None
+                if isinstance(statement.value, ast.Name):
+                    instance = instances.get(statement.value.id)
+                    alias = aliases.get(statement.value.id)
+                elif isinstance(statement.value, ast.Call) and imported(statement.value.func):
+                    try:
+                        _, args, kwargs = call_literal(statement.value)
+                        instance = {'origin': {'function': qualified(statement.value.func),
+                                              'args': args, 'kwargs': kwargs}, 'calls': []}
+                    except (ValueError, TypeError):
+                        pass
+                if any(not isinstance(t, ast.Name) for t in targets):
+                    aliases.clear()
+                    instances.clear()
+                    continue
+                if any(isinstance(n, ast.Call) for n in ast.walk(statement)):
+                    instances.clear()
+                    if instance is None:
+                        aliases.clear()
+                for target in targets:
+                    aliases.pop(target.id, None)
+                    instances.pop(target.id, None)
+                    if instance is not None:
+                        instances[target.id] = instance
+                    elif alias is not None:
+                        aliases[target.id] = alias
+            elif isinstance(statement, ast.Assert) and positions.get(statement.lineno):
+                expression = statement.test
+                if not (isinstance(expression, ast.Compare) and len(expression.ops) == 1
+                        and isinstance(expression.ops[0], (ast.Eq, ast.Is))):
+                    if any(isinstance(n, ast.Call) for n in ast.walk(statement)):
+                        aliases.clear()
+                        instances.clear()
+                    continue
+                left, right = expression.left, expression.comparators[0]
+                node = right if isinstance(right, ast.Call) else left
+                try:
+                    literal(left if node is right else right)
+                    context, receiver, args, kwargs = resolve(node)
+                    encoded = acceptance.encoded(context)
+                except (ValueError, TypeError):
+                    aliases.clear()
+                    instances.clear()
+                    continue
+                claim_id = positions[statement.lineno].pop(0)
+                if len(encoded) <= min(2500, remaining):
+                    bindings[claim_id] = json.loads(encoded)
+                    remaining -= len(encoded)
+                if receiver is not None:
+                    receiver['calls'].append({'method': node.func.attr, 'args': args, 'kwargs': kwargs})
+                else:
+                    instances.clear()
+            elif not isinstance(statement, ast.Pass):
+                aliases.clear()
+                instances.clear()
+    return bindings
+
+
 def oracle_packet(packet):
     # Deliberately omit candidate source, descriptions, rationale, verdict and proposed outputs.
     planning = packet.get('submission') in PLAN_SUBMISSIONS
@@ -172,8 +324,14 @@ def oracle_packet(packet):
             'calls': [{k: c[k] for k in ('id', 'function', 'args', 'kwargs')} for c in selected]}
     if planning:
         value.update(kind='plan_returns_v1', instructions_sha256=acceptance.digest(RESULT_ORACLE_PROMPT))
+    elif 'call_bindings' in packet:
+        value.update(kind='literal_calls_v2', instructions_sha256=packet['oracle_instructions_sha256'])
+        for call in value['calls']:
+            call['call_context'] = packet['call_bindings'][call['id']]
     if packet.get('operator_context'):
         value['operator_context'] = packet['operator_context']
+    if packet.get('interface_facts') is not None:
+        value['interface_facts'] = packet['interface_facts']
     return value
 
 
@@ -221,8 +379,9 @@ def oracle_issues(packet, result):
             issues.append('Cannot establish ' + claim['function'] + ': ' + row['basis'])
         elif not same(claim['proposed'], json.loads(row['value_json'])):
             issues.append('Assertion ' + claim['check_id'] + ' line ' + str(claim['line']) + ': '
-                + claim['function'] + '(' + json.dumps(claim['args']) + ') expects '
-                + row['value_json'] + ', not ' + json.dumps(claim['proposed']) + '. ' + row['basis'])
+                + claim['function'] + '(' + json.dumps(claim['args']) + ') asserts '
+                + json.dumps(claim['proposed']) + '; independent derivation returned ' + row['value_json']
+                + '. Recheck this disagreement against the original requirements. Basis: ' + row['basis'])
     return [issue[:600] for issue in issues[:6]]
 
 
@@ -431,6 +590,11 @@ def packet(state, key, submission, candidate, task, snapshot):
             'source_excerpts': observations, 'excerpt_limit_chars': 2800}
     if submission in PLAN_SUBMISSIONS:
         value['return_instructions_sha256'] = acceptance.digest(RESULT_ORACLE_PROMPT)
+    else:
+        value['call_bindings'] = call_bindings(candidate)
+        value['oracle_instructions_sha256'] = acceptance.digest(BOUND_ORACLE_PROMPT)
+    if state['roles'].get(key, {}).get('interface_facts') is not None:
+        value['interface_facts'] = state['roles'][key]['interface_facts']
     if state.get('steering'):
         # Clarification changes the review/cache identity without erasing old judgments.
         value['operator_context'] = json.loads(acceptance.encoded(state['steering'][-2:]))
@@ -444,7 +608,18 @@ def validate(run, state):
     policy = mission.read(path)
     if state.get('contract_policy') != mission.reference(run, path) or policy not in (POLICY, ASSERTION_POLICY, LEGACY_POLICY):
         raise HornetError('Contract review policy changed or is missing')
+    from . import goal_contract
+    # Check caller authority and the exact appended check set independently of
+    # model review. A reviewer approved only the author's original submission.
+    goal_contract.validate(run, state)
     for key, record in state['roles'].items():
+        if ('interface_facts_ref' in record) != ('interface_facts' in record):
+            raise HornetError('API declaration evidence lost its binding')
+        if 'interface_facts_ref' in record:
+            ref = record['interface_facts_ref']
+            if (mission.reference(run, run / ref['path']) != ref
+                    or mission.read(run / ref['path']) != record.get('interface_facts')):
+                raise HornetError('API declaration evidence changed')
         for ref in record.get('review_attempts', []):
             path = run / ref['path']
             if mission.reference(run, path) != ref:
@@ -474,6 +649,7 @@ def validate(run, state):
         verdict(receipt['verdict'])
         packet_value = receipt['packet']
         if (receipt['verdict']['decision'] != 'approve' or packet_value['role'] != key
+                or packet_value.get('interface_facts') != record.get('interface_facts')
                 or packet_value['submission'] != record['submission']
                 or packet_value['goal_sha256'] != state['goal_sha256']
                 or not same(packet_value['candidate'], record['value'])):
@@ -483,15 +659,14 @@ def validate(run, state):
     if state.get('goal_checks') is not None:
         # Caller-authored checks are pinned before intake, not model proposals.
         # Validate that separate authority instead of manufacturing a review.
-        from . import goal_contract
         supplied = goal_contract.read(run, state)
-        if supplied is not None:
-            goal_contract.validate(run, state)
-        elif not same(state['roles'].get('goal-verifier', {}).get('value'), state['goal_checks']):
+        if supplied is None and not same(state['roles'].get('goal-verifier', {}).get('value'), state['goal_checks']):
             raise HornetError('Goal checks differ from their reviewed submission')
     for ident, cell in state['cells'].items():
         if 'checks' in cell:
             proposed = state['roles'].get('verifier-' + ident, {}).get('value')
             checks = [c for c in cell['checks']['checks'] if c['id'] != 'typed-return']
+            if state.get('cell_gate_policy'):
+                checks = mission.read(run / 'cells' / ident / 'generated-acceptance.json')['checks']
             if not same(proposed, {'schema_version': 1, 'checks': checks}):
                 raise HornetError('Cell checks differ from their reviewed submission')

@@ -53,6 +53,26 @@ except (api['WorkerError'], OSError, ValueError, subprocess.SubprocessError) as 
 print(json.dumps(result))
 """
 
+READ_SOURCE_SCRIPT = """import base64, hashlib, json, runpy, sys
+api = runpy.run_path('/opt/hornet-worker/worker.py')
+try:
+    worker = api['Worker'](__import__('pathlib').Path.cwd())
+    args = json.loads(sys.argv[1])
+    offset = args['offset']
+    if type(offset) is not int or not 0 <= offset <= 256 * 1024:
+        raise ValueError('Invalid source offset')
+    raw = worker.path(args['path']).read_bytes()
+    if len(raw) > 256 * 1024:
+        raise ValueError('Source exceeds the 256 KiB limit')
+    raw.decode('utf-8-sig')
+    result = {'ok': True, 'sha256': hashlib.sha256(raw).hexdigest(), 'bytes': len(raw),
+              'chunk': base64.b64encode(raw[offset:offset + 12000]).decode('ascii')}
+except (ValueError, OSError, api['WorkerError']) as exc:
+    result = {'ok': False, 'error': str(exc)}
+print(json.dumps(result))
+"""
+
+
 class SSHWorker:
     operation_protocol = 1
 
@@ -85,6 +105,8 @@ class SSHWorker:
             raise HornetError("OpenSSH client is unavailable")
 
     def call(self, tool, arguments=None):
+        if tool == 'read_source':
+            return self._read_source(arguments)
         if tool == "run_tests":
             return run_suite(self._rpc)
         if tool == "snapshot":
@@ -110,6 +132,37 @@ class SSHWorker:
                 return {"ok": False, "error": "run_python requires 1-4000 characters of Python code"}
             return self._rpc("run_command", {"argv": ["python3", "-c", arguments["code"]]})
         return self._rpc(tool, arguments)
+
+    def _read_source(self, arguments):
+        from .cells import path as safe_path
+        if not isinstance(arguments, dict) or set(arguments) != {'path'}:
+            raise HornetError('read_source requires one scoped relative path')
+        path = safe_path(arguments['path'])
+        raw, expected = b'', None
+        for offset in range(0, 256 * 1024 + 1, 12000):
+            reply = self._rpc('run_command', {'argv': ['python3', '-c', READ_SOURCE_SCRIPT,
+                json.dumps({'path': path, 'offset': offset})]})
+            if not reply.get('ok'):
+                return reply
+            part = json.loads(reply['output'])
+            if not part.get('ok'):
+                return part
+            if expected is None:
+                expected = part['sha256']
+            if expected != part['sha256'] or not 0 <= part['bytes'] <= 256 * 1024:
+                raise HornetError('Source changed while reading registry candidate')
+            chunk = base64.b64decode(part['chunk'], validate=True)
+            if len(chunk) > 12000:
+                raise HornetError('Invalid registry source chunk')
+            raw += chunk
+            if len(raw) == part['bytes']:
+                if hashlib.sha256(raw).hexdigest() != expected:
+                    raise HornetError('Registry source hash mismatch')
+                return {'ok': True, 'path': path, 'sha256': expected,
+                        'content_base64': base64.b64encode(raw).decode('ascii')}
+            if not chunk or len(raw) > part['bytes']:
+                break
+        raise HornetError('Incomplete registry source read')
 
     def _edit_file(self, arguments):
         fields = {"path", "old_text", "new_text", "expected_sha256"}

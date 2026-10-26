@@ -148,6 +148,8 @@ def prepare(run, state, gate, failure, cell_task):
         'max_turns': min(state['limits']['cell_turns'], remaining),
         'max_tools': min(state['limits']['cell_tools'], tools_left), 'task': task,
         'checks': checks, 'checks_sha256': acceptance.digest(checks)}
+    if state['settings'].get('registry_only'):
+        contract['registry_only'] = True
     mission.immutable(path / 'contract.json', contract)
     mission.immutable(path / 'acceptance.json', checks)
     state['goal_repairs'].append({'contract': mission.reference(run, path / 'contract.json')})
@@ -168,6 +170,8 @@ def checked_job(project, run, contract):
     if path is None:
         return None
     job = session.load(project, path)
+    if contract.get('registry_only') and not job['settings'].get('registry_only'):
+        raise HornetError('Goal repair lost its required registry-only policy')
     if (not path.resolve().is_relative_to(directory(run, contract['number']).resolve())
             or job['task'] != contract['task'] or job['acceptance'] != contract['checks']
             or job['acceptance_sha256'] != contract['checks_sha256']
@@ -259,6 +263,7 @@ def validate(run, state):
             original = session.load(project, returns.child_path(run, cell, state['cells'][cell['id']]))
             counts[cell['id']] = original['tools_used']
         if (pending or contract['number'] != number or contract['cell'] != cell['id']
+                or contract.get('registry_only', False) != state['settings'].get('registry_only', False)
                 or contract['files'] != cell['files'] or contract['source'] != previous
                 or contract['goal_sha256'] != state['goal_sha256'] or contract['plan_sha256'] != state['plan_sha256']
                 or contract['policy'] != state['goal_repair_policy']

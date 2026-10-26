@@ -29,6 +29,8 @@ def validate_checkpoint(job, tool, arguments):
 def validate_history(run, job):
     import json
     for item in job['history']:
+        if ('dispatched_tool' in item or 'operation_result' in item) and item.get('tool') != 'call_proxy_tool':
+            raise ValueError('Only a registry commit may wrap a worker operation result')
         if 'operation_id' not in item:
             continue
         ident = item['operation_id']
@@ -41,9 +43,9 @@ def validate_history(run, job):
         active = receipt['request']
         validate(active)
         if (receipt['version'] != 1 or receipt['status'] != 'completed'
-                or active['id'] != ident or active['tool'] != item['tool']
+                or active['id'] != ident or active['tool'] != item.get('dispatched_tool', item['tool'])
                 or active['arguments'] != item.get('dispatched_arguments', item['arguments'])
-                or receipt['result'] != item['result'] or receipt['request_sha256'] != digest(active)
+                or receipt['result'] != item.get('operation_result', item['result']) or receipt['request_sha256'] != digest(active)
                 or receipt['result_sha256'] != digest(receipt['result'])
                 or receipt['after_sha256'] != digest(receipt['after'])
                 or receipt['after']['binding'] != active['before']['binding']):

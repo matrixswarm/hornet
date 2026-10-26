@@ -1,5 +1,6 @@
 """Resume real file edits in disposable fixtures, including crash boundaries."""
 import argparse
+import base64
 import hashlib
 import json
 import os
@@ -32,6 +33,15 @@ class LocalWorker:
         if name == 'snapshot':
             return {'ok': True, 'binding': self.binding.copy(), 'files': {
                 self.worker.rel(p): hashlib.sha256(p.read_bytes()).hexdigest() for p in self.worker.files()}}
+        if name == 'read_source':
+            if not isinstance(arguments, dict) or set(arguments) != {'path'}:
+                raise HornetError('read_source requires one scoped relative path')
+            raw = self.worker.path(arguments['path']).read_bytes()
+            if len(raw) > 256 * 1024:
+                raise HornetError('Source exceeds the 256 KiB limit')
+            raw.decode('utf-8-sig')
+            return {'ok': True, 'sha256': hashlib.sha256(raw).hexdigest(),
+                    'content_base64': base64.b64encode(raw).decode('ascii')}
         if name == 'changes':
             return {'ok': True, 'files': [{'path': self.worker.rel(p), 'content': p.read_text()} for p in self.worker.files()]}
         if name == 'run_tests':

@@ -1,7 +1,8 @@
 # Builders with durable contracts
 
-Status: planned prototype, recorded 2026-10-23. No tools described here are
-implemented or released yet. Origin: Daniel F. MacDonald's proposal for an
+Status: contract assembly remains planned. Version 0.18.0 includes [registry discovery and scoped file transformations](REGISTRY.md), including
+Python interface, method and Strategy helpers. The UUID submission/assembly
+lifecycle below is not implemented or released. Origin: Daniel F. MacDonald's proposal for an
 orchestrator to provision an interface, assign its implementation through a UUID
 contract, and assemble agent returns into a complete product.
 

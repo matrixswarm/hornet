@@ -359,8 +359,12 @@ class InheritedRepairTests(unittest.TestCase):
             '--goal', 'Add triple(n) to number.py and preserve existing behavior.'])
         self.break_parent, self.turn = True, 0
         result = goals.revise(self.project, self.args, source, self.model)
-        self.assertTrue(result['ok'], result)
         run = Path(result['run_dir'])
+        if not result['ok']:
+            # Keep the worker evidence in CI output before TemporaryDirectory cleanup.
+            reports = {path.name: mission.read(path)
+                       for path in sorted((run / 'final-checks').glob('*.json'))}
+            self.fail(json.dumps({'result': result, 'final_checks': reports}, indent=2))
         state = autonomous.load(self.project, run)
         contract = mission.read(run / state['goal_repairs'][0]['contract']['path'])
         self.assertTrue(contract['gate'].startswith('revision:'))

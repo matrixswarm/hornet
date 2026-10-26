@@ -1,0 +1,48 @@
+{
+  "name": "precision_formatting",
+  "version": "2.1.0",
+  "description": "Insert a Python body with automatic preparation and validation. The agent supplies logic; the tool preserves the signature and adds enclosing indentation.",
+  "steps": [
+    {
+      "tool": "get_asset_details",
+      "uri": "languages.coding.python.method.fill",
+      "purpose": "Inspect the exact contract and target selection. Supply body statements only, no def/signature."
+    },
+    {
+      "action": "read",
+      "purpose": "Read the target. In a coding cell use read_file and its read_ref; in standalone MCP inspect/call files.text.read and use source_sha256."
+    },
+    {
+      "tool": "call_proxy_tool",
+      "uri": "languages.coding.python.method.fill",
+      "purpose": "Provide the complete body, target and observed version. Preparation removes a common margin, parses the body, adds enclosing indentation and compiles the whole candidate automatically. commit=false previews; commit=true performs the guarded write."
+    },
+    {
+      "action": "verify",
+      "purpose": "Read committed bytes back and run authorized acceptance checks. A preview or successful parse alone is not completion."
+    }
+  ],
+  "optional_body_diagnostics": [
+    {
+      "tool": "get_asset_details",
+      "uri": "files.text.indent",
+      "purpose": "Inspect the pure formatter if a separate body check is useful."
+    },
+    {
+      "tool": "call_proxy_tool",
+      "uri": "files.text.indent",
+      "arguments": {
+        "text": "    check(value)\n    return value",
+        "op": "python_body",
+        "lang": "python"
+      },
+      "purpose": "Returns the prepared body, or a line-specific syntax error. Pass returned text to method.fill as logic without adding spaces or a wrapper."
+    }
+  ],
+  "body_rules": [
+    "Sequential body-level statements start at column 0. Only nested suites are indented.",
+    "A common margin is removable; inconsistent internal indentation needs the agent to correct its intended nesting.",
+    "Never strip every line: that changes conditionals and loops."
+  ],
+  "limits": "This recipe is guidance data, not an executable macro. A body parse does not prove function-context validity or application behavior. Whole-file compilation and acceptance checks remain required."
+}

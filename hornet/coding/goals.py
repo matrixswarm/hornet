@@ -171,18 +171,33 @@ def route_cell(run, state, ident):
     return revision
 
 
-def brief(revision):
+def brief(revision, current_cell=None):
     if revision is None:
         return ''
     value = {key: revision[key] for key in ('targets', 'allowed_files', 'affected_cells')}
-    value['interfaces'] = [{'cell': c['id'], 'path': c['result'].get('path'),
+    value['preserved_interfaces'] = [{'cell': c['id'], 'path': c['result'].get('path'),
                             'function': c['result'].get('function')} for c in revision['context']]
     if revision.get('source_cell'):
-        value['source_cell'] = revision['source_cell']
-    return ('\nController revision routing (data): ' + acceptance.encoded(value) +
-            '\nImplement the requested follow-up in these files. Preserve earlier behavior; inherited goal checks '
+        # Full prior tasks/results remain in revision.json. Repeating their old
+        # imperative and return call after the new task can steer a small model
+        # back to work already completed.
+        prior = revision['source_cell']
+        value['historical_source_cell'] = {key: prior[key] for key in ('id', 'files', 'return_manifest')}
+    if current_cell is not None:
+        value['allowed_files'] = current_cell['files']
+    text = ('\nRevision provenance and preservation constraints (historical data, not a new assignment): '
+            + acceptance.encoded(value) +
+            '\nPreserve earlier behavior; inherited goal checks '
             'will be rerun. Return manifests record the original cell; repair receipts record subsequent changes. '
-            'Prior transcripts and full source are retained outside this prompt. Read the current relevant files.')
+            'The previous task and return value remain in revision.json; they are not the requested follow-up. '
+            'Read the current relevant files.')
+    if current_cell is not None:
+        current = {key: current_cell[key] for key in ('id', 'task', 'files', 'result')}
+        text += ('\nCurrent cell assignment (authoritative within the current goal requirements): '
+                 + acceptance.encoded(current) +
+                 '\nComplete this current assignment and its exact result call. The preserved interfaces '
+                 'above are existing behavior to retain, not replacement targets chosen for you.')
+    return text
 
 
 def regression_evidence(run, state):
@@ -237,6 +252,10 @@ def revise(project, args, worker=None, request_model=None):
     args.worker_config = state['settings']['worker_config']
     args.source_workspace = state['settings'].get('workspace')
     args.revision = revision
+    if getattr(args, 'registry_assets', None) is None and state['settings'].get('registry_assets') is not None:
+        args.registry_assets = list(state['settings']['registry_assets'])
+    if getattr(args, 'registry_only', None) is None and state['settings'].get('registry_only') is not None:
+        args.registry_only = state['settings']['registry_only']
     if not getattr(args, 'agent', None):
         if (state['settings'].get('hive') and getattr(args, 'model', None) is None
                 and getattr(args, 'base_url', None) is None):

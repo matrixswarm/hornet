@@ -1,0 +1,42 @@
+{
+  "name": "atomic_commit",
+  "version": "2.0.0",
+  "description": "Read, preview, verify, commit and read back one file.",
+  "steps": [
+    {
+      "tool": "get_asset_details",
+      "uri": "files.text.read",
+      "purpose": "Get the exact read contract"
+    },
+    {
+      "tool": "call_proxy_tool",
+      "uri": "files.text.read",
+      "purpose": "Read target and retain source_sha256"
+    },
+    {
+      "tool": "get_asset_details",
+      "uri": "files.text.atomic_edit",
+      "purpose": "Get exact edit arguments"
+    },
+    {
+      "tool": "call_proxy_tool",
+      "uri": "files.text.atomic_edit",
+      "purpose": "Preview with commit=false and expected_sha256 from the read"
+    },
+    {
+      "action": "inspect_preview",
+      "purpose": "Check candidate content against the cell contract; STAGED is not a completed edit"
+    },
+    {
+      "tool": "call_proxy_tool",
+      "uri": "files.text.atomic_edit",
+      "purpose": "Repeat identical operation with commit=true and the preview source_sha256"
+    },
+    {
+      "tool": "call_proxy_tool",
+      "uri": "files.text.read",
+      "purpose": "Read back; perform the cell acceptance checks and record paths/hashes"
+    }
+  ],
+  "limits": "One file transaction, syntax checks only. Previews retained. No zero-drift or application-correctness guarantee."
+}

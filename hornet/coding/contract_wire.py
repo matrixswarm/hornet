@@ -39,7 +39,8 @@ CALL_GUIDANCE = (
     ' MODEL SUBMISSION FORMAT: a code result has exactly path, call, schema. '
     'call is one ordinary Python call with concrete literal inputs, such as add_tax(350, 8) or '
     'quote(items=[100, 250], rate_percent=8). schema is a native JSON Schema object. '
-    'Example: {"path":"parity_cell.py","call":"is_even(3)","schema":{"type":"boolean"}}. '
+    'If the goal requires is_even(3) to return False, use '
+    '{"path":"parity_cell.py","call":"is_even(3)","schema":{"type":"boolean","enum":[false]}}. '
     'schema describes the actual VALUE returned by the call, not a module, function definition, source file or API map. '
     'Supply every required parameter. is_even() supplies none. Use Python True/False/None in call text. '
     'Only literal strings, numbers, booleans, None, lists and string-keyed dictionaries are supported; '
@@ -47,7 +48,14 @@ CALL_GUIDANCE = (
     "consume({'$cell': 'earlier-id'}). "
     'Research results still contain schema only. Do not submit separate function, args, kwargs or encoded JSON fields. '
     'This field declares one returned value; separate acceptance checks verify the other required examples. '
+    'When the goal gives the exact returned value for your selected call, require that one value with '
+    'a singleton enum. For a known string use {"type":"string","enum":["the required string"]}; '
+    'for a known integer use {"type":"integer","enum":[7]}. An object with function names as keys '
+    'does not describe a function that returns a string or integer. '
     'Do not combine multiple calls in this field or invent a wrapper to collect test results. '
+    'The result call names a function in the delivered source file. Controller tools such as find_asset, '
+    'get_asset_details and call_proxy_tool are operations used while working, not product functions. '
+    'Put a required tool procedure in the cell task; keep a cohesive implementation in one cell with its product return. '
     'The controller parses the call without executing its text and handles storage encoding. '
     'An object return schema must specify properties, required and additionalProperties explicitly.')
 CALL_INTAKE_PROMPT = INTAKE_PROMPT.replace(
@@ -84,7 +92,7 @@ def result_schema():
         return {'type': 'object', 'properties': props,
                 'required': ['type', *required], 'additionalProperties': False}
     nested = {'type': 'object', 'properties': {}, 'additionalProperties': True}
-    return {'description': 'Schema of the concrete value returned by the call, not the source file or exported function names.', 'anyOf': [
+    return {'description': 'Schema of this call\'s one returned value. If the goal fixes its exact value, require a singleton enum containing it. Do not wrap a scalar in an object of function names.', 'anyOf': [
         variant({'type': 'string', 'enum': ['boolean', 'integer', 'number', 'string', 'null']}),
         variant({'type': 'string', 'const': 'array'}, {'items': nested}, ('items',)),
         variant({'type': 'string', 'const': 'object'}, {

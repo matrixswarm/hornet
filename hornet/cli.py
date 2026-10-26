@@ -125,6 +125,10 @@ def build_parser():
         auto.add_argument('--model')
         auto.add_argument('--agent', help='Named default agent from hive.json; role and cell assignments still apply')
         auto.add_argument('--base-url')
+        auto.add_argument('--registry-asset', dest='registry_assets', action='append',
+                          help='Limit cell registry assets to this canonical URI; repeat to allow more')
+        auto.add_argument('--registry-only', action='store_true', default=None,
+                          help='Require cell edits through reviewed registry tools; omit direct write and execution tools')
         auto.add_argument('--protocol', choices=('native', 'lmstudio-json'), default='lmstudio-json')
         auto.add_argument('--max-tokens', type=int, default=3072)
         auto.add_argument('--timeout', type=int, default=120)

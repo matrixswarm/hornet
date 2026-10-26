@@ -403,5 +403,63 @@ class MissionTests(unittest.TestCase):
         self.assertTrue(all('always fails' in error for error in errors))
 
 
+class BehavioralPreflightTests(unittest.TestCase):
+    def check(self, source):
+        value = {'id': 'exceptions', 'description': 'Check exceptions', 'paths': ['api.py'],
+                 'timeout': 5, 'python': source}
+        mission.behavioral_checks({'schema_version': 1, 'checks': [value]}, ['api.py'])
+
+    def test_exception_forms_and_aliases_are_recognized(self):
+        forms = [
+            'from unittest import TestCase\nTestCase().assertRaises(ValueError, int, "x")',
+            'from unittest import TestCase as TC\ncheck = TC()\ncheck.assertRaises(ValueError, int, "x")',
+            'import unittest as ut\ncheck = ut.TestCase()\ncheck.assertRaisesRegex(ValueError, "invalid", int, "x")',
+            'import unittest\nwith unittest.TestCase().assertRaises(ValueError):\n    int("x")',
+            'from unittest import TestCase\ncheck = TestCase()\nwith check.assertRaisesRegex(ValueError, "invalid"):\n    int("x")',
+            'from unittest import TestCase\ndef verify():\n    check = TestCase()\n    check.assertRaises(ValueError, int, "x")\nverify()',
+        ]
+        for source in forms:
+            with self.subTest(source=source):
+                self.check(source)
+                exec(source, {})
+
+    def test_missing_assertions_and_unrelated_methods_are_rejected_with_check_id(self):
+        forms = [
+            'assert True',
+            'from unittest import TestCase\nTestCase().assertRaises(ValueError)',
+            'from unittest import TestCase\nTestCase().assertRaisesRegex(ValueError, "invalid")',
+            'from api import fake\nfake.assertRaises(ValueError, int, "x")',
+            'from unittest import TestCase\ncheck = TestCase()\ncheck = fake\ncheck.assertRaises(ValueError, int, "x")',
+            'from unittest import TestCase\nTestCase = fake\nTestCase().assertRaises(ValueError, int, "x")',
+            'from unittest import TestCase\ncheck = TestCase()\ndef verify(check):\n    check.assertRaises(ValueError, int, "x")',
+        ]
+        for source in forms:
+            with self.subTest(source=source), self.assertRaisesRegex(HornetError, 'Check exceptions:.*assertions'):
+                self.check(source)
+
+    def test_preflight_does_not_execute_candidate_code(self):
+        self.check('from unittest import TestCase\nraise RuntimeError("Do not execute")\n'
+                   'TestCase().assertRaises(ValueError, int, "x")')
+
+    def test_class_only_exception_check_explains_script_execution(self):
+        source = ('from unittest import TestCase\n'
+                  'class TestExceptions(TestCase):\n'
+                  '    def test_invalid_input(self):\n'
+                  '        with self.assertRaises(ValueError):\n'
+                  '            int("x")\n')
+        with self.assertRaises(HornetError) as caught:
+            self.check(source)
+        message = str(caught.exception)
+        self.assertIn('Check exceptions:', message)
+        self.assertIn('test discovery does not run automatically', message)
+        self.assertIn('Defining a test class or test method alone does not execute', message)
+        self.assertIn('module-level TestCase instance', message)
+        # The documented correction must both pass preflight and execute.
+        corrected = ('from unittest import TestCase\n'
+                     'TestCase().assertRaises(ValueError, int, "x")')
+        self.check(corrected)
+        exec(corrected, {})
+
+
 if __name__ == '__main__':
     unittest.main()

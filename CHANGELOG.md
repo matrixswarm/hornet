@@ -1,5 +1,85 @@
 # Changelog
 
+## 0.18.0 — 2026-10-26
+
+Registry integration for coding cells.
+
+- Include the inherited-repair test's final-check evidence in failure output,
+  before temporary fixtures are removed, to diagnose intermittent failures.
+- Include completed direct dependencies' declared behavior in consumer task
+  packets, deduplicating verbatim requirements without expanding histories or
+  file permissions. Add source-bound Python signatures and method kinds without
+  implementation bodies. Freeze the policy and preserve older saved packets.
+- Flag ambiguous bare method/scalar assertions after earlier declared-method calls
+  before freezing generated checks; require an explicit return call or dynamic
+  lookup without claiming unknown runtime types are proven.
+- Package the repaired capability catalog, explicit aliases, native tools and
+  stdio MCP gateway without prototype paths, databases or conversation files.
+- Offer 17 reviewed transformations and two recipes to new coding cells, with
+  repeatable `--registry-asset` selection and exact cell file scope.
+- Require contract inspection, guard source versions, prepare isolated candidates
+  and commit through the existing durable worker operation journal.
+- Retain registry receipts in return manifests, require committed-file readback,
+  stop repeated unchanged failures, and preserve operation recovery across a
+  lost reply. Bind resumed cells to their registry implementation and permissions.
+- Preserve canonical IDs, hashes and receipt references when active context is
+  shortened. Document the agent procedure and adapter extension boundary.
+- Add `--registry-only` to require discovered registry operations for cell edits,
+  retain that policy through repairs/revisions, and reject direct-write bypasses.
+  Give unmatched searches operation-word guidance and include registry calls in the
+  existing stagnation detector.
+- Supply source-bound Python API declarations to new registry-only check authors
+  and their reviewers, preserving the distinction between module functions and
+  instance methods without exposing implementation bodies as expected answers.
+  Retain this evidence and validate its binding on resume.
+- Remove direct-edit guidance from registry-only worker prompts. Build the
+  execution menu from the two latest inspected tool contracts, with exact
+  canonical IDs and argument schemas; rebuild it from retained observations on
+  resume. File scope, hash guards and operation receipts remain authoritative.
+- Distinguish adding a function from replacing an existing body in worker guidance;
+  preserve exact requested symbol names and discover the appropriate operation.
+- Keep historical revision tasks and return values in retained provenance;
+  present the current cell's task, file scope and exact return call last in the
+  worker handoff so the prior assignment does not compete with the follow-up.
+- Support job-bound short `read_ref` handles in cell registry writes while keeping
+  full hashes in durable operations. Reject accidental method signatures supplied
+  as bodies, and clarify method calls versus property access in check review.
+- Offer exact current file versions from confirmed reads in registry execution
+  menus. Present parsed check code to reviewers
+  and recommend independent standard-library exception assertions to check authors.
+- Reject direct scalar assertions on known ordinary method objects before
+  freezing generated checks, using the captured API declarations. Preserve the
+  rejected submission and allow correction within the existing role budget.
+- Prepare and parse Python bodies automatically in method insertion; report
+  line-specific indentation errors before writing. Add the same optional pure
+  body preparation to `files.text.indent` and document it in the formatting recipe.
+- Count equivalent confirmed read handles as the same failed edit against the
+  same bytes; rereading cannot reset the identical-failure budget.
+- Split capability search labels at underscores, hyphens and dots, rank exact
+  IDs first, and stop offering unrelated editors after an unmatched search.
+- Preserve multiline string values and the target's indentation during method
+  insertion; compare the complete parsed structure before committing.
+- Recognize standard-library exception-only acceptance checks in both cell and
+  goal validation. Identify the rejected check and explain assertion syntax and
+  fixture isolation; preserve independent review and executed verification.
+- Explain that generated acceptance scripts do not automatically discover
+  unittest/pytest test classes. Guide authors toward executed assertions and
+  distinguish proposed answers from independent derivations in mismatch feedback.
+- Read committed registry files back automatically, retaining exact bytes and
+  hash-bound evidence before reporting success. Interrupted readback recovers
+  the original write receipt without repeating the write or spending a model turn.
+- Treat constructors, inheritance, decorators and dynamic attribute lookup as
+  uncertain when checking method/property assertions; discard bindings after
+  unknown side effects.
+- Give independent result derivation bounded call-site context: imported names,
+  literal receiver construction and preceding calls on that object. Keep proposed
+  answers hidden and preserve the interpretation of older review receipts.
+- Run ready caller-supplied goal checks at upstream cell boundaries, so a consumer
+  is not started with a dependency that already fails its known contract. Freeze
+  the routing policy and original authored checks, retain the complete final gate,
+  and recover interrupted check preparation without changing saved evidence.
+
+
 ## 0.17.0 — 2026-10-24
 
 Opt-in periodic supervision resumes explicitly enrolled goals at validated

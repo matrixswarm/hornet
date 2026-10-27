@@ -114,6 +114,29 @@ that Hornet succeeded. Inspect the inner exit code and result. Correct the
 reported configuration once, then rerun `worker-status` before spending model
 turns. Never include passwords or private-key contents in diagnostic reports.
 
+### Invalid JSON from the worker
+
+The starter's authorized SSH key forces this guest command:
+`/usr/bin/python3 -I /opt/hornet-worker/worker.py`. The SSH command name
+`hornet-worker` is a request label; the forced command supplies the actual
+entry point. Creating `/usr/local/bin/hornet-worker` as a symlink to the `hornet`
+CLI does not recreate that deployment. There is no `hornet worker` CLI subcommand
+that substitutes for it.
+
+For a status probe the controller sends exactly this JSON line over stdin:
+
+```json
+{"tool": "status", "arguments": {}}
+```
+
+The worker must return one JSON object with a Boolean `ok` on stdout. It does
+not read the controller's `worker.json`, receive model settings, connect to LM
+Studio or run `hornet work`. Empty output, CLI help or a banner mixed into stdout
+indicates a protocol/deployment problem; the message alone cannot identify which
+remote program ran. Inspect the matching starter deployment and retain the failed
+VM for diagnosis. Do not replace the worker with a CLI symlink or manually create
+readiness markers. Run `worker-status` successfully before retrying the model task.
+
 ## Pause the machine after work
 
 Once the controller has exited, request guest shutdown:

@@ -14,6 +14,8 @@ Worker setup diagnostics maintenance release.
   contents. Preserve current-directory resolution for relative credential paths.
 - Document `worker-status`, JSON/text errors and shell-wrapper exit codes; add
   regressions for the reported setup loop and valid configurations.
+- Explain empty/non-JSON worker replies and the forced SSH entry point. Preserve
+  strict reply validation and document the exact status request on stdin.
 - Refresh the starter version. No automatic worker or saved-run migration;
   tagged-ticket, math and restart-controller experiments remain outside this release.
 

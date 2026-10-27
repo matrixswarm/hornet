@@ -266,7 +266,13 @@ class SSHWorker:
         try:
             response = json.loads(result.stdout)
         except ValueError:
-            raise HornetError("Worker returned an invalid JSON response") from None
+            kind = 'empty stdout' if not result.stdout.strip() else 'non-JSON stdout'
+            raise HornetError("Worker returned an invalid JSON response ({}). Expected one JSON object from "
+                              "the provisioned worker. The starter's SSH key forces /usr/bin/python3 -I "
+                              "/opt/hornet-worker/worker.py; a symlink to the hornet CLI does not install that entry point. "
+                              "The worker reads tool/arguments JSON on stdin, not worker.json or model settings. "
+                              "Check the matching starter deployment and keep stdout free of banners or help text.".format(kind)) from None
         if not isinstance(response, dict) or type(response.get("ok")) is not bool:
-            raise HornetError("Worker response is missing an operation status")
+            raise HornetError("Worker response is missing an operation status: expected a JSON object with a Boolean 'ok'. "
+                              "Check the matching starter's forced SSH worker entry point; the hornet CLI is not the worker.")
         return response

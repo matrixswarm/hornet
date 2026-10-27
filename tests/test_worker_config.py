@@ -152,5 +152,51 @@ class WorkerConfigTests(unittest.TestCase):
         self.assertNotIn('Traceback', result.stderr)
 
 
+class WorkerProtocolTests(unittest.TestCase):
+    def connection(self):
+        worker = SSHWorker.__new__(SSHWorker)
+        worker.ssh, worker.port, worker.user = 'ssh', 2223, 'hornet'
+        worker.identity, worker.known_hosts = Path('identity'), Path('known_hosts')
+        return worker
+
+    def test_status_sends_only_operation_json_over_pinned_ssh(self):
+        result = subprocess.CompletedProcess([], 0, '{"ok": true, "ready": true}', '')
+        with patch('hornet.coding.transport.subprocess.run', return_value=result) as remote:
+            self.assertTrue(self.connection()._wire('status')['ready'])
+        args, kwargs = remote.call_args
+        self.assertEqual(args[0][-2:], ['hornet@127.0.0.1', 'hornet-worker'])
+        self.assertIn('StrictHostKeyChecking=yes', args[0])
+        self.assertEqual(json.loads(kwargs['input']), {'tool': 'status', 'arguments': {}})
+        self.assertTrue(kwargs['input'].endswith('\n'))
+
+    def test_empty_or_help_output_explains_worker_entry_point(self):
+        for output, expected in (('', 'empty stdout'), (' \n', 'empty stdout'),
+                                 ('Usage: hornet PRIVATE-CONTENT-SENTINEL', 'non-JSON stdout'),
+                                 ('banner\n{"ok":true}', 'non-JSON stdout')):
+            with self.subTest(output=output):
+                result = subprocess.CompletedProcess([], 0, output, 'HOST-CONTENT-SENTINEL')
+                with patch('hornet.coding.transport.subprocess.run', return_value=result):
+                    with self.assertRaises(HornetError) as error:
+                        self.connection()._wire('status')
+                message = str(error.exception)
+                for part in (expected, '/opt/hornet-worker/worker.py', 'symlink', 'stdin'):
+                    self.assertIn(part, message)
+                self.assertNotIn('PRIVATE-CONTENT-SENTINEL', message)
+                self.assertNotIn('HOST-CONTENT-SENTINEL', message)
+
+    def test_incorrect_json_shape_is_not_accepted_as_status(self):
+        for output in ('[]', 'null', '{}', '{"ok": 1}', '{"ok": "true"}'):
+            with self.subTest(output=output):
+                result = subprocess.CompletedProcess([], 0, output, '')
+                with patch('hornet.coding.transport.subprocess.run', return_value=result):
+                    with self.assertRaisesRegex(HornetError, "Boolean 'ok'"):
+                        self.connection()._wire('status')
+
+    def test_worker_refusal_remains_a_valid_operation_response(self):
+        result = subprocess.CompletedProcess([], 0, '{"ok": false, "error": "not ready"}', '')
+        with patch('hornet.coding.transport.subprocess.run', return_value=result):
+            self.assertEqual(self.connection()._wire('status'), {'ok': False, 'error': 'not ready'})
+
+
 if __name__ == '__main__':
     unittest.main()

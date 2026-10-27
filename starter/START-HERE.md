@@ -1,9 +1,9 @@
-# Hornet 0.18.0 — first coding goal
+# Hornet 0.18.1 — first coding goal
 
 Give a local model a small coding goal. Hornet keeps the work, checks and recovery
 state in a separate goal directory, then exports the result for your review.
 
-The starter kit includes the 0.18.0 wheel, its matching source, a small
+The starter kit includes the 0.18.1 wheel, its matching source, a small
 Python exercise and a setup tool for a **new dedicated Ubuntu VM**. Start with the
 installation check, then complete the coding exercise. The Windows walkthrough
 uses Python 3.9+, OpenSSH and VirtualBox. Linux commands are included below and in
@@ -44,12 +44,12 @@ environment's executable directly; activating scripts is unnecessary.
 
 ```powershell
 py -3 -m venv .venv
-.\.venv\Scripts\python.exe -m pip install --no-index --no-deps .\matrixswarm_hornet-0.18.0-py3-none-any.whl
+.\.venv\Scripts\python.exe -m pip install --no-index --no-deps .\matrixswarm_hornet-0.18.1-py3-none-any.whl
 .\.venv\Scripts\hornet.exe --version
 .\.venv\Scripts\python.exe .\tools\first_run.py --project .\my-first-goal
 ```
 
-Expected: `matrixswarm-hornet 0.18.0`, followed by `INSTALLATION CHECK PASSED`.
+Expected: `matrixswarm-hornet 0.18.1`, followed by `INSTALLATION CHECK PASSED`.
 The check initializes a new project, runs local diagnostics, and verifies a
 small file contract. It does not contact a model. It refuses to overwrite a
 project, so choose another name for a second trial.
@@ -59,7 +59,7 @@ you already used the one-command launcher above:
 
 ```bash
 python3 -m venv .venv
-.venv/bin/python -m pip install --no-index --no-deps ./matrixswarm_hornet-0.18.0-py3-none-any.whl
+.venv/bin/python -m pip install --no-index --no-deps ./matrixswarm_hornet-0.18.1-py3-none-any.whl
 .venv/bin/python tools/first_run.py --project ./my-first-goal
 ```
 

@@ -72,6 +72,10 @@ stay stopped for inspection. See [the supervisor guide](docs/SUPERVISOR.md).
 
 ## Discoverable tools for coding cells
 
+Hornet 0.18.1 improves worker setup errors: missing credential fields, local
+file paths and the required worker account are checked before SSH. See
+[worker setup troubleshooting](starter/WORKER-SETUP.md#diagnose-a-configuration-failure-before-retrying).
+
 Hornet 0.18.0 adds a [cell tool registry](docs/REGISTRY.md). Agents discover a
 capability, inspect its exact contract, apply a scoped transformation, and retain
 write and readback receipts. Use `--registry-only` to require these tools for edits:

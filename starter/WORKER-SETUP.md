@@ -41,7 +41,7 @@ outbound networking. Shared folders, clipboard and drag-and-drop are not enabled
 
 The starter kit's `tools/start_linux.py --download-image` performs the complete
 Linux setup, including image download and checksum verification. See the Linux
-Linux section in START-HERE.md. The following commands are the manual option.
+section in START-HERE.md. The following commands are the manual option.
 
 Run these commands on the Linux host that runs VirtualBox and LM Studio.
 Use a fresh extracted starter folder and the project created by `first_run.py`.
@@ -80,6 +80,39 @@ If startup fails, inspect the VM console and cloud-init output. Keep the failed
 setup for diagnosis. The helper intentionally refuses to overwrite a partial
 setup; use another project/name after identifying the failure. Do not rerun it
 against an established worker to upgrade it.
+
+## Diagnose a configuration failure before retrying
+
+Run `worker-status` on the host running Hornet and LM Studio. Wait for
+`ready: true` before starting `work` or `autowork`:
+
+```bash
+.venv/bin/hornet --root ./my-first-goal worker-status --worker-config worker.json --json
+```
+
+Use the `worker.json` generated for that project and VM. Its credential fields
+are named **`identity_file`** and **`known_hosts_file`**. The names `identity` and
+`known_hosts` are rejected, including when the correct fields are also present.
+Both values are paths to files on the controller host. Copying a private key
+into the VM does not repair a missing host file; the VM needs the public key.
+The generated paths are absolute. For existing manually authored configurations,
+relative credential paths retain their original meaning: they resolve from the
+command's current working directory, not `--root` or the JSON file's directory.
+
+The worker account must be `hornet`. Changing `user` from a personal account to
+`hornet` does not install the worker. A matching provisioned VM also needs its
+protected worker code, forced SSH entry point and baseline Git workspace.
+Restore the generated configuration when available. If the original setup is
+missing, preserve its files and VM and use the matching starter to create a new
+worker with an unused name and port. Do not disable host-key verification or
+rerun provisioning against an established worker.
+
+On a configuration error, Hornet exits with code `2`. With `--json`, the error
+is an `ok: false` JSON result on stdout; without it, the error is on stderr.
+A shell/MCP wrapper reporting that it successfully ran a command does not imply
+that Hornet succeeded. Inspect the inner exit code and result. Correct the
+reported configuration once, then rerun `worker-status` before spending model
+turns. Never include passwords or private-key contents in diagnostic reports.
 
 ## Pause the machine after work
 

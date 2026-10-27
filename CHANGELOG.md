@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.18.1 — 2026-10-27
+
+Worker setup diagnostics maintenance release.
+
+- Identify missing or invalid `identity_file` and `known_hosts_file` fields;
+  explicitly reject the mistaken `identity` and `known_hosts` spellings.
+- Report missing credential paths on the controller, including resolved paths,
+  and explain that copying keys into the VM does not fix local configuration.
+- Reject an unprovisioned account name before SSH dispatch. Preserve the existing
+  required `hornet` account, pinned host checking and connection binding format.
+- Report unreadable host pins and path-resolution errors without exposing file
+  contents. Preserve current-directory resolution for relative credential paths.
+- Document `worker-status`, JSON/text errors and shell-wrapper exit codes; add
+  regressions for the reported setup loop and valid configurations.
+- Explain empty/non-JSON worker replies and the forced SSH entry point. Preserve
+  strict reply validation and document the exact status request on stdin.
+- Refresh the starter version. No automatic worker or saved-run migration;
+  tagged-ticket, math and restart-controller experiments remain outside this release.
+
 ## 0.18.0 — 2026-10-26
 
 Registry integration for coding cells.

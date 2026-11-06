@@ -1,0 +1,11 @@
+{
+  "name": "session_workflow",
+  "version": "1.0.0",
+  "description": "A reviewable staged editing workflow with explicit recovery.",
+  "steps": [
+    {"action": "inspect", "purpose": "Read the target and inspect current staged content; never assume a line position or a target match."},
+    {"tool": "read_recipe", "uri": "recipe.edit.session_edit_verified", "purpose": "Read the backup, preparation, edit, review, validation, commit and readback workflow."},
+    {"action": "recover", "purpose": "If validation fails, inspect the staged content. If source or commit conflicts occur, preserve the sidecar and analyze the external change before deciding how to proceed."}
+  ],
+  "limits": "Guidance only. This adapts a prototype workflow to Hornet's exact-text replacement API; it does not provide the prototype's line-index or bulk-edit methods."
+}

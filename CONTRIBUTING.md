@@ -27,9 +27,10 @@ python -m build
 python -m twine check dist/*
 ```
 
-The package contains `hornet/` and its bundled recipe. Tests, starter instructions
-and setup tools are included in the source distribution. Models, VM images and
-credentials are never bundled. Keep local runs outside this checkout.
+The wheel contains `hornet/` and its registry catalog and recipes. Tests,
+documentation, starter instructions and setup tools are
+included in the source distribution. Models, VM images and credentials are not
+bundled. Keep local runs outside this checkout.
 
 Include your test results and known limits with a pull request. Do not commit
 private keys, provider tokens, worker configurations, VM seeds or conversation logs.

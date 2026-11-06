@@ -1,0 +1,10 @@
+{
+  "name": "matrix_input_check",
+  "version": "1.0.0",
+  "description": "Inspect matrix input values and dimensions before multiplication.",
+  "steps": [
+    {"action": "inspect", "purpose": "Confirm A and B are non-empty rectangular matrices of finite real numbers."},
+    {"action": "dimensions", "purpose": "For A multiplied by B, confirm the column count of A equals the row count of B."}
+  ],
+  "limits": "Guidance only; this recipe does not validate input or calculate a result."
+}

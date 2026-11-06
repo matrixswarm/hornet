@@ -43,7 +43,7 @@ class WorkerConfigTests(unittest.TestCase):
     def test_qwen_aliases_and_account_report_all_schema_mistakes(self):
         self.config['identity'] = self.config.pop('identity_file')
         self.config['known_hosts'] = self.config.pop('known_hosts_file')
-        self.config['user'] = 'pete'
+        self.config['user'] = 'example-user'
         message = self.refused()
         for expected in ("Unsupported field 'identity'; use 'identity_file'",
                          "Unsupported field 'known_hosts'; use 'known_hosts_file'",
@@ -81,7 +81,7 @@ class WorkerConfigTests(unittest.TestCase):
         self.assertIn('existing regular local file: ' + str(self.root), self.refused())
 
     def test_wrong_account_stops_before_ssh(self):
-        self.config['user'] = 'pete'
+        self.config['user'] = 'example-user'
         self.assertIn('changing the name alone does not install the worker', self.refused())
 
     def test_path_resolution_failure_is_controlled(self):
@@ -142,7 +142,7 @@ class WorkerConfigTests(unittest.TestCase):
         self.assertNotIn('Traceback', result.stderr)
 
     def test_cli_text_mode_reports_exit_two_on_stderr(self):
-        self.config['user'] = 'pete'
+        self.config['user'] = 'example-user'
         self.save()
         result = subprocess.run([sys.executable, '-m', 'hornet', '--root', str(self.root),
                                  'worker-status', '--worker-config', 'worker.json'],

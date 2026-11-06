@@ -168,7 +168,7 @@ class CLITests(unittest.TestCase):
 
     def test_archive_rejects_active_historical_pointer(self):
         self.goal("done")
-        self.put("continue/pointers/ptr.json", {"status": "LOCKED", "current_node": "/home/pete/dev/hornet/continue/goals/done/cells/cell1"})
+        self.put("continue/pointers/ptr.json", {"status": "LOCKED", "current_node": "/home/example/hornet/continue/goals/done/cells/cell1"})
         self.call("archive", "--node", "done", expected=2)
 
     def test_archive_operation_lock(self):

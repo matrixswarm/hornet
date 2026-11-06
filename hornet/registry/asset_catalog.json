@@ -165,11 +165,11 @@
       "uri": "files.text.atomic_edit",
       "path": "assets/atomic_editor.py",
       "type": "TOOL",
-      "version": "2.0.0",
+      "version": "2.1.0",
       "aliases": [
         "mcp.atomic_editor"
       ],
-      "description": "Replace one uniquely matched line or insert at a 1-based line. Validate before commit.",
+      "description": "Create a new file, replace or delete one unique line, or insert text. Validate before commit.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -182,7 +182,9 @@
             "type": "string",
             "enum": [
               "replace",
-              "insert"
+              "insert",
+              "delete",
+              "create"
             ]
           },
           "target_text": {
@@ -223,7 +225,7 @@
           "commit": false
         }
       ],
-      "notes": "replace requires target_text matching exactly one line; insert requires line_number. Replaces the whole matched line.",
+      "notes": "replace requires target_text matching one line or a unique multi-line block (line-ending styles match equivalently); delete requires one matching line; insert requires line_number; create refuses overwrite. For delete use empty new_text. Python/JSON candidates are validated.",
       "mutates": true
     },
     {
@@ -234,18 +236,21 @@
       "aliases": [
         "mcp.live_probe"
       ],
-      "description": "Evaluate a Python expression in a separate interpreter; timeout 5 seconds.",
+      "description": "Evaluate an expression or execute Python code in a separate interpreter.",
       "inputSchema": {
         "type": "object",
         "properties": {
           "expression": {
             "type": "string",
             "minLength": 1
+          },
+          "code": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Python statements; runs with the server user's permissions."
           }
         },
-        "required": [
-          "expression"
-        ],
+        "anyOf": [{"required": ["expression"]}, {"required": ["code"]}],
         "additionalProperties": false
       },
       "examples": [
@@ -253,7 +258,7 @@
           "expression": "sum([1, 2, 3])"
         }
       ],
-      "notes": "Executes code with the server user's permissions. Not read-only and not sandboxed.",
+      "notes": "Executes code with the server user's permissions. Not read-only and not sandboxed. Expressions time out after 5 seconds; scripts after 15 seconds. Supply exactly one of expression and code.",
       "mutates": true
     },
     {
@@ -281,6 +286,11 @@
             "type": "integer",
             "minimum": 1,
             "maximum": 300
+          },
+          "shell": {
+            "type": "string",
+            "enum": ["bash", "powershell"],
+            "description": "Optional explicit shell; otherwise use the host default."
           }
         },
         "required": [
@@ -1192,6 +1202,1118 @@
         }
       ],
       "notes": "Prefer this tool for reading before an edit; it has no action parameter. Use bounded ranges for large files.",
+      "mutates": false
+    },
+    {
+      "uri": "recipe.math.matrix_input_check",
+      "path": "recipes/matrix_input_check.json",
+      "type": "RECIPE",
+      "version": "1.0.0",
+      "aliases": ["matrix_input_check_v1"],
+      "description": "Check matrix values and compatible dimensions before multiplication."
+    },
+    {
+      "uri": "recipe.math.matrix_multiply_checked",
+      "path": "recipes/matrix_multiply_checked.json",
+      "type": "RECIPE",
+      "version": "1.0.0",
+      "aliases": ["matrix_multiply_checked_v1"],
+      "description": "Check matrix inputs, calculate a product, and verify its dimensions and selected entries."
+    },
+    {
+      "uri": "recipe.input.result_handling",
+      "path": "recipes/input_result_handling.json",
+      "type": "RECIPE",
+      "version": "1.0.0",
+      "aliases": ["input_result_handling_v1"],
+      "description": "Handle an answer, cancellation, timeout, or error from an interactive client without inventing input."
+    },
+    {
+      "uri": "recipe.edit.session_prepare",
+      "path": "recipes/session_prepare.json",
+      "type": "RECIPE",
+      "version": "1.0.0",
+      "opt_in": true,
+      "aliases": ["atomic_prepare_v1"],
+      "description": "Read the target and begin and inspect a staged session."
+    },
+    {
+      "uri": "recipe.edit.session_prepare_with_backup",
+      "path": "recipes/session_prepare_with_backup.json",
+      "type": "RECIPE",
+      "version": "1.0.0",
+      "opt_in": true,
+      "aliases": ["safe_atomic_prepare_v1"],
+      "description": "Verify an independent backup before preparing a staged session."
+    },
+    {
+      "uri": "recipe.edit.session_edit_verified",
+      "path": "recipes/session_edit_verified.json",
+      "type": "RECIPE",
+      "version": "1.0.0",
+      "opt_in": true,
+      "aliases": ["atomic_edit_verified_v1"],
+      "description": "Back up, stage, review, validate, commit and verify a session edit."
+    },
+    {
+      "uri": "recipe.edit.session_workflow",
+      "path": "recipes/session_workflow.json",
+      "type": "RECIPE",
+      "version": "1.0.0",
+      "opt_in": true,
+      "aliases": ["python_suite_blitzkrieg_v1"],
+      "description": "A staged editing workflow with explicit conflict recovery."
+    },
+    {
+      "uri": "math.linear_algebra.compute",
+      "path": "assets/linear_algebra.py",
+      "type": "TOOL",
+      "version": "1.0.0",
+      "aliases": [],
+      "description": "Compute matrix and vector operations with NumPy, including decompositions, linear systems, spaces and numerical LaTeX parsing.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "operation": {
+            "type": "string",
+            "enum": [
+              "compute_eigenvalues",
+              "compute_rank",
+              "find_column_space_basis",
+              "find_null_space_basis",
+              "gram_schmidt_orthogonalization",
+              "least_squares_solution",
+              "lu_decomposition",
+              "matrix_addition",
+              "matrix_determinant",
+              "matrix_inverse",
+              "matrix_multiplication",
+              "matrix_rank",
+              "matrix_transpose",
+              "orthogonal_projection",
+              "parse_matrix",
+              "process_matrix",
+              "qr_decomposition",
+              "scalar_multiply",
+              "singular_value_decomposition",
+              "solve_linear_system",
+              "vector_cross_product",
+              "vector_dot_product",
+              "vector_norm"
+            ]
+          },
+          "matrix_a": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 10000,
+            "items": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 10000,
+              "items": {
+                "type": "number"
+              }
+            }
+          },
+          "matrix_b": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 10000,
+            "items": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 10000,
+              "items": {
+                "type": "number"
+              }
+            }
+          },
+          "A": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 10000,
+            "items": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 10000,
+              "items": {
+                "type": "number"
+              }
+            }
+          },
+          "B": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 10000,
+            "items": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 10000,
+              "items": {
+                "type": "number"
+              }
+            }
+          },
+          "matrix": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 10000,
+            "items": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 10000,
+              "items": {
+                "type": "number"
+              }
+            }
+          },
+          "scalar": {
+            "type": "number"
+          },
+          "v1": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 10000,
+            "items": {
+              "type": "number"
+            }
+          },
+          "v2": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 10000,
+            "items": {
+              "type": "number"
+            }
+          },
+          "vector": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 10000,
+            "items": {
+              "type": "number"
+            }
+          },
+          "p": {
+            "type": "number",
+            "minimum": 1
+          },
+          "b": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 10000,
+            "items": {
+              "type": "number"
+            }
+          },
+          "basis_vectors": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 10000,
+            "items": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 10000,
+              "items": {
+                "type": "number"
+              }
+            }
+          },
+          "text": {
+            "type": "string",
+            "minLength": 1
+          },
+          "matrix_data": {
+            "type": "object",
+            "properties": {
+              "parsed_matrix": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 10000,
+                "items": {
+                  "type": "array",
+                  "minItems": 1,
+                  "maxItems": 10000,
+                  "items": {
+                    "type": "number"
+                  }
+                }
+              },
+              "detected_matrix_name": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "dimensions": {
+                "type": "array",
+                "items": {
+                  "type": "integer"
+                }
+              },
+              "is_valid": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "parsed_matrix"
+            ],
+            "additionalProperties": false
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "construct_c",
+              "validate_rank",
+              "compute_properties"
+            ]
+          }
+        },
+        "required": [
+          "operation"
+        ],
+        "additionalProperties": false,
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "operation": {
+                "type": "string",
+                "enum": [
+                  "matrix_addition"
+                ]
+              },
+              "matrix_a": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 10000,
+                "items": {
+                  "type": "array",
+                  "minItems": 1,
+                  "maxItems": 10000,
+                  "items": {
+                    "type": "number"
+                  }
+                }
+              },
+              "matrix_b": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 10000,
+                "items": {
+                  "type": "array",
+                  "minItems": 1,
+                  "maxItems": 10000,
+                  "items": {
+                    "type": "number"
+                  }
+                }
+              }
+            },
+            "required": [
+              "operation",
+              "matrix_a",
+              "matrix_b"
+            ],
+            "additionalProperties": false,
+            "description": "Add two equally shaped matrices."
+          },
+          {
+            "type": "object",
+            "properties": {
+              "operation": {
+                "type": "string",
+                "enum": [
+                  "matrix_multiplication"
+                ]
+              },
+              "A": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 10000,
+                "items": {
+                  "type": "array",
+                  "minItems": 1,
+                  "maxItems": 10000,
+                  "items": {
+                    "type": "number"
+                  }
+                }
+              },
+              "B": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 10000,
+                "items": {
+                  "type": "array",
+                  "minItems": 1,
+                  "maxItems": 10000,
+                  "items": {
+                    "type": "number"
+                  }
+                }
+              }
+            },
+            "required": [
+              "operation",
+              "A",
+              "B"
+            ],
+            "additionalProperties": false,
+            "description": "Multiply A by B."
+          },
+          {
+            "type": "object",
+            "properties": {
+              "operation": {
+                "type": "string",
+                "enum": [
+                  "matrix_transpose"
+                ]
+              },
+              "matrix": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 10000,
+                "items": {
+                  "type": "array",
+                  "minItems": 1,
+                  "maxItems": 10000,
+                  "items": {
+                    "type": "number"
+                  }
+                }
+              }
+            },
+            "required": [
+              "operation",
+              "matrix"
+            ],
+            "additionalProperties": false,
+            "description": "Transpose a matrix."
+          },
+          {
+            "type": "object",
+            "properties": {
+              "operation": {
+                "type": "string",
+                "enum": [
+                  "scalar_multiply"
+                ]
+              },
+              "matrix": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 10000,
+                "items": {
+                  "type": "array",
+                  "minItems": 1,
+                  "maxItems": 10000,
+                  "items": {
+                    "type": "number"
+                  }
+                }
+              },
+              "scalar": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "operation",
+              "matrix",
+              "scalar"
+            ],
+            "additionalProperties": false,
+            "description": "Multiply every matrix entry by a finite real scalar."
+          },
+          {
+            "type": "object",
+            "properties": {
+              "operation": {
+                "type": "string",
+                "enum": [
+                  "matrix_determinant"
+                ]
+              },
+              "matrix": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 10000,
+                "items": {
+                  "type": "array",
+                  "minItems": 1,
+                  "maxItems": 10000,
+                  "items": {
+                    "type": "number"
+                  }
+                }
+              }
+            },
+            "required": [
+              "operation",
+              "matrix"
+            ],
+            "additionalProperties": false,
+            "description": "Compute the determinant of a square matrix."
+          },
+          {
+            "type": "object",
+            "properties": {
+              "operation": {
+                "type": "string",
+                "enum": [
+                  "matrix_inverse"
+                ]
+              },
+              "matrix": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 10000,
+                "items": {
+                  "type": "array",
+                  "minItems": 1,
+                  "maxItems": 10000,
+                  "items": {
+                    "type": "number"
+                  }
+                }
+              }
+            },
+            "required": [
+              "operation",
+              "matrix"
+            ],
+            "additionalProperties": false,
+            "description": "Compute a square, numerically nonsingular matrix inverse."
+          },
+          {
+            "type": "object",
+            "properties": {
+              "operation": {
+                "type": "string",
+                "enum": [
+                  "vector_dot_product"
+                ]
+              },
+              "v1": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 10000,
+                "items": {
+                  "type": "number"
+                }
+              },
+              "v2": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 10000,
+                "items": {
+                  "type": "number"
+                }
+              }
+            },
+            "required": [
+              "operation",
+              "v1",
+              "v2"
+            ],
+            "additionalProperties": false,
+            "description": "Compute the dot product of equally sized vectors."
+          },
+          {
+            "type": "object",
+            "properties": {
+              "operation": {
+                "type": "string",
+                "enum": [
+                  "vector_cross_product"
+                ]
+              },
+              "v1": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 10000,
+                "items": {
+                  "type": "number"
+                }
+              },
+              "v2": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 10000,
+                "items": {
+                  "type": "number"
+                }
+              }
+            },
+            "required": [
+              "operation",
+              "v1",
+              "v2"
+            ],
+            "additionalProperties": false,
+            "description": "Compute the cross product of two three-dimensional vectors."
+          },
+          {
+            "type": "object",
+            "properties": {
+              "operation": {
+                "type": "string",
+                "enum": [
+                  "vector_norm"
+                ]
+              },
+              "vector": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 10000,
+                "items": {
+                  "type": "number"
+                }
+              },
+              "p": {
+                "type": "number",
+                "minimum": 1
+              }
+            },
+            "required": [
+              "operation",
+              "vector"
+            ],
+            "additionalProperties": false,
+            "description": "Compute an Lp norm for a real vector and positive p >= 1."
+          },
+          {
+            "type": "object",
+            "properties": {
+              "operation": {
+                "type": "string",
+                "enum": [
+                  "orthogonal_projection"
+                ]
+              },
+              "matrix": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 10000,
+                "items": {
+                  "type": "array",
+                  "minItems": 1,
+                  "maxItems": 10000,
+                  "items": {
+                    "type": "number"
+                  }
+                }
+              },
+              "vector": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 10000,
+                "items": {
+                  "type": "number"
+                }
+              }
+            },
+            "required": [
+              "operation",
+              "matrix",
+              "vector"
+            ],
+            "additionalProperties": false,
+            "description": "Project vector onto the column space, including rank-deficient matrices."
+          },
+          {
+            "type": "object",
+            "properties": {
+              "operation": {
+                "type": "string",
+                "enum": [
+                  "solve_linear_system"
+                ]
+              },
+              "A": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 10000,
+                "items": {
+                  "type": "array",
+                  "minItems": 1,
+                  "maxItems": 10000,
+                  "items": {
+                    "type": "number"
+                  }
+                }
+              },
+              "b": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 10000,
+                "items": {
+                  "type": "number"
+                }
+              }
+            },
+            "required": [
+              "operation",
+              "A",
+              "b"
+            ],
+            "additionalProperties": false,
+            "description": "Solve Ax=b, reporting unique, infinite, or inconsistent solutions."
+          },
+          {
+            "type": "object",
+            "properties": {
+              "operation": {
+                "type": "string",
+                "enum": [
+                  "find_null_space_basis"
+                ]
+              },
+              "matrix": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 10000,
+                "items": {
+                  "type": "array",
+                  "minItems": 1,
+                  "maxItems": 10000,
+                  "items": {
+                    "type": "number"
+                  }
+                }
+              }
+            },
+            "required": [
+              "operation",
+              "matrix"
+            ],
+            "additionalProperties": false,
+            "description": "Find an orthonormal basis for the right null space."
+          },
+          {
+            "type": "object",
+            "properties": {
+              "operation": {
+                "type": "string",
+                "enum": [
+                  "find_column_space_basis"
+                ]
+              },
+              "matrix": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 10000,
+                "items": {
+                  "type": "array",
+                  "minItems": 1,
+                  "maxItems": 10000,
+                  "items": {
+                    "type": "number"
+                  }
+                }
+              }
+            },
+            "required": [
+              "operation",
+              "matrix"
+            ],
+            "additionalProperties": false,
+            "description": "Return independent original columns spanning the column space."
+          },
+          {
+            "type": "object",
+            "properties": {
+              "operation": {
+                "type": "string",
+                "enum": [
+                  "compute_rank"
+                ]
+              },
+              "matrix": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 10000,
+                "items": {
+                  "type": "array",
+                  "minItems": 1,
+                  "maxItems": 10000,
+                  "items": {
+                    "type": "number"
+                  }
+                }
+              }
+            },
+            "required": [
+              "operation",
+              "matrix"
+            ],
+            "additionalProperties": false,
+            "description": "Compute the numerical row and column rank."
+          },
+          {
+            "type": "object",
+            "properties": {
+              "operation": {
+                "type": "string",
+                "enum": [
+                  "gram_schmidt_orthogonalization"
+                ]
+              },
+              "basis_vectors": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 10000,
+                "items": {
+                  "type": "array",
+                  "minItems": 1,
+                  "maxItems": 10000,
+                  "items": {
+                    "type": "number"
+                  }
+                }
+              }
+            },
+            "required": [
+              "operation",
+              "basis_vectors"
+            ],
+            "additionalProperties": false,
+            "description": "Orthonormalize independent input vectors, omitting dependent vectors."
+          },
+          {
+            "type": "object",
+            "properties": {
+              "operation": {
+                "type": "string",
+                "enum": [
+                  "qr_decomposition"
+                ]
+              },
+              "matrix": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 10000,
+                "items": {
+                  "type": "array",
+                  "minItems": 1,
+                  "maxItems": 10000,
+                  "items": {
+                    "type": "number"
+                  }
+                }
+              }
+            },
+            "required": [
+              "operation",
+              "matrix"
+            ],
+            "additionalProperties": false,
+            "description": "Compute reduced QR with A = Q @ R."
+          },
+          {
+            "type": "object",
+            "properties": {
+              "operation": {
+                "type": "string",
+                "enum": [
+                  "lu_decomposition"
+                ]
+              },
+              "matrix": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 10000,
+                "items": {
+                  "type": "array",
+                  "minItems": 1,
+                  "maxItems": 10000,
+                  "items": {
+                    "type": "number"
+                  }
+                }
+              }
+            },
+            "required": [
+              "operation",
+              "matrix"
+            ],
+            "additionalProperties": false,
+            "description": "Compute pivoted LU for a square matrix: P @ A = L @ U."
+          },
+          {
+            "type": "object",
+            "properties": {
+              "operation": {
+                "type": "string",
+                "enum": [
+                  "compute_eigenvalues"
+                ]
+              },
+              "matrix": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 10000,
+                "items": {
+                  "type": "array",
+                  "minItems": 1,
+                  "maxItems": 10000,
+                  "items": {
+                    "type": "number"
+                  }
+                }
+              }
+            },
+            "required": [
+              "operation",
+              "matrix"
+            ],
+            "additionalProperties": false,
+            "description": "Compute eigenvalues of a square matrix; complex values have real and imag fields."
+          },
+          {
+            "type": "object",
+            "properties": {
+              "operation": {
+                "type": "string",
+                "enum": [
+                  "singular_value_decomposition"
+                ]
+              },
+              "matrix": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 10000,
+                "items": {
+                  "type": "array",
+                  "minItems": 1,
+                  "maxItems": 10000,
+                  "items": {
+                    "type": "number"
+                  }
+                }
+              }
+            },
+            "required": [
+              "operation",
+              "matrix"
+            ],
+            "additionalProperties": false,
+            "description": "Compute reduced SVD: A = U @ diag(S) @ Vt."
+          },
+          {
+            "type": "object",
+            "properties": {
+              "operation": {
+                "type": "string",
+                "enum": [
+                  "least_squares_solution"
+                ]
+              },
+              "A": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 10000,
+                "items": {
+                  "type": "array",
+                  "minItems": 1,
+                  "maxItems": 10000,
+                  "items": {
+                    "type": "number"
+                  }
+                }
+              },
+              "b": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 10000,
+                "items": {
+                  "type": "number"
+                }
+              }
+            },
+            "required": [
+              "operation",
+              "A",
+              "b"
+            ],
+            "additionalProperties": false,
+            "description": "Compute the least-squares solution and residual norm."
+          },
+          {
+            "type": "object",
+            "properties": {
+              "operation": {
+                "type": "string",
+                "enum": [
+                  "matrix_rank"
+                ]
+              },
+              "matrix": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 10000,
+                "items": {
+                  "type": "array",
+                  "minItems": 1,
+                  "maxItems": 10000,
+                  "items": {
+                    "type": "number"
+                  }
+                }
+              }
+            },
+            "required": [
+              "operation",
+              "matrix"
+            ],
+            "additionalProperties": false,
+            "description": "Compute numerical rank and nullity."
+          },
+          {
+            "type": "object",
+            "properties": {
+              "operation": {
+                "type": "string",
+                "enum": [
+                  "parse_matrix"
+                ]
+              },
+              "text": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": [
+              "operation",
+              "text"
+            ],
+            "additionalProperties": false,
+            "description": "Parse numeric LaTeX bmatrix or pmatrix notation."
+          },
+          {
+            "type": "object",
+            "properties": {
+              "operation": {
+                "type": "string",
+                "enum": [
+                  "process_matrix"
+                ]
+              },
+              "matrix_data": {
+                "type": "object",
+                "properties": {
+                  "parsed_matrix": {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": 10000,
+                    "items": {
+                      "type": "array",
+                      "minItems": 1,
+                      "maxItems": 10000,
+                      "items": {
+                        "type": "number"
+                      }
+                    }
+                  },
+                  "detected_matrix_name": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "dimensions": {
+                    "type": "array",
+                    "items": {
+                      "type": "integer"
+                    }
+                  },
+                  "is_valid": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "parsed_matrix"
+                ],
+                "additionalProperties": false
+              },
+              "action": {
+                "type": "string",
+                "enum": [
+                  "construct_c",
+                  "validate_rank",
+                  "compute_properties"
+                ]
+              }
+            },
+            "required": [
+              "operation",
+              "matrix_data"
+            ],
+            "additionalProperties": false,
+            "description": "Process parsed matrix data: construct_c, validate_rank, or compute_properties."
+          }
+        ]
+      },
+      "examples": [{"operation": "matrix_multiplication", "A": [[1, 2]], "B": [[3], [4]]}],
+      "notes": "Install matrixswarm-hornet[math]. Numerical floating-point results and rank estimates depend on conditioning; inspect the operation-specific schema. Inputs and matrix products are limited to 10,000 elements; each matrix axis is limited to 256.",
+      "mutates": false
+    },
+    {
+      "uri": "files.text.session_edit",
+      "path": "assets/session_editor.py",
+      "type": "TOOL",
+      "version": "1.0.0",
+      "opt_in": true,
+      "aliases": [],
+      "description": "Start, resume, inspect, validate and commit a persistent Python or JSON editing session on the registry host.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "root": {"type": "string", "minLength": 1, "description": "Absolute existing root directory on the server host."},
+          "path": {"type": "string", "minLength": 1, "description": "Existing Python or JSON file, relative to root; symbolic links are refused."},
+          "action": {"type": "string", "enum": ["begin", "show", "replace", "validate", "commit"]},
+          "source_sha256": {"type": "string", "description": "Required for begin: hash observed by reading the source."},
+          "session": {"type": "string", "description": "Required after begin: exact returned session ID."},
+          "revision": {"type": "string", "description": "Required after begin: latest returned sidecar revision hash."},
+          "target_text": {"type": "string", "description": "For replace: nonempty text occurring exactly once in the staged document."},
+          "new_text": {"type": "string", "description": "For replace: replacement text, which may be empty."},
+          "offset": {"type": "integer", "minimum": 0, "description": "For show: character offset into staged text; returns up to 4000 characters."}
+        },
+        "required": ["root", "path", "action"],
+        "additionalProperties": false
+      },
+      "examples": [{"root": "/absolute/workspace", "path": "app.py", "action": "begin", "source_sha256": "READ_SOURCE_SHA256_FIRST"}],
+      "notes": "Standalone host-side tool; not enabled for coding cells. Begin requires the source hash, then each call requires the returned session and current revision. Staged work survives process restarts in an adjacent sidecar. Show can inspect a conflicted session; edits and commit refuse source changes. Commit validates Python or JSON and keeps the sidecar as evidence. Sessions and locks are not a sandbox; unrelated processes can modify host files, and clients must be trusted. The lock only coordinates cooperating Hornet writers.",
+      "mutates": true
+    },
+    {
+      "uri": "research.web.search",
+      "path": "assets/web_search.py",
+      "type": "TOOL",
+      "version": "1.0.0",
+      "opt_in": true,
+      "aliases": [],
+      "description": "Search the public web and return bounded, untrusted result titles and URLs.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "query": {"type": "string", "minLength": 1, "description": "Search text, at most 500 characters."},
+          "limit": {"type": "integer", "minimum": 1, "maximum": 10}
+        },
+        "required": ["query"],
+        "additionalProperties": false
+      },
+      "examples": [{"query": "example topic", "limit": 3}],
+      "notes": "Standalone opt-in only: allow this URI explicitly and set HORNET_ENABLE_WEB_SEARCH=1. Sends queries to DuckDuckGo. Results are untrusted; this tool does not fetch result pages. Provider redirects and responses over 512 KiB are rejected.",
       "mutates": false
     }
   ]

@@ -1,5 +1,47 @@
 # Hornet
 
+Hornet is a local-first coding workspace and command-line workflow for working
+with models. **Hornet Coder** (Mission Control) creates project revisions, builds
+reviewable project maps and prepares coding missions. Hornet also includes the
+existing CLI, tool registry and standalone MCP server.
+
+Start with the [walkthrough](docs/WALKTHROUGH.md) and [desktop guide](docs/DESKTOP.md).
+The [architecture guide](docs/ARCHITECTURE.md) describes the workspace and shared
+services. Project revisions and mission records stay on your machine; source
+and prompts selected for a mission are sent to the configured model server.
+
+## Start Hornet Coder
+
+Install Python 3.9 or newer with Tk support. On Ubuntu/Debian, install `git`,
+`python3`, `python3-venv`, and `python3-tk`, then in the cloned repository run:
+
+```sh
+python3 -m venv .venv
+.venv/bin/python -m pip install .
+.venv/bin/hornet-coder
+```
+
+On Windows, create a virtual environment with `py -3 -m venv .venv`, install
+with `.\.venv\Scripts\python.exe -m pip install .`, and launch
+`.\.venv\Scripts\hornet-coder.exe`. The `hornet-desktop` launcher and
+`python -m hornet.coder` are also available. Load a compatible model and start
+its OpenAI-compatible server before using model features; the default endpoint
+is `http://localhost:1234/v1`.
+
+Projects default to `~/.hornet/projects` and can contain private source,
+prompts and model outputs. Back them up separately from this repository. A VM
+is not needed to launch Coder; its optional test runner requires a separately
+configured VM. The CLI starter below has its own VM workflow.
+
+## Support Hornet
+
+If Hornet is useful to you, help fund its continued development at
+[ko-fi.com/matrixswarm](https://ko-fi.com/matrixswarm).
+
+---
+
+## Original command-line workflow
+
 **Give a local model a coding goal. Keep the work when the conversation ends.**
 
 Hornet turns a goal into small cells with explicit file scopes, typed results,
@@ -11,8 +53,8 @@ OpenAI-compatible LM Studio server. Python 3.9+; no runtime Python dependencies.
 
 ## Install from PyPI
 
-[Hornet on PyPI](https://pypi.org/project/matrixswarm-hornet/) is available as
-`matrixswarm-hornet`. Install it in a Python 3.9+ virtual environment:
+For a release available on [PyPI](https://pypi.org/project/matrixswarm-hornet/),
+install it in a Python 3.9+ environment and check the version:
 
 ```console
 python -m pip install matrixswarm-hornet
@@ -27,7 +69,7 @@ configure a worker VM and connect your local model for coding goals.
 
 1. Open the [latest signed release](https://github.com/matrixswarm/hornet/releases/latest).
 2. Download the **starter ZIP**, `SHA256SUMS`, `SHA256SUMS.asc`, the public signing
-   key and `VERIFY-RELEASE.md`.
+   key and `VERIFY-RELEASE.md`, plus every file listed in `SHA256SUMS`.
 3. Verify the download, extract it, and follow **START-HERE.md** inside.
 
 The walkthrough installs Hornet, checks a local file contract, creates a new

@@ -28,3 +28,15 @@ worker.json
 /archive/
 /my-first-goal/
 /starter/my-first-goal/
+
+# Local projects, chat boards, databases and editor previews can contain private data.
+/.hornet/
+queued_lmstudio_chats/
+*.db
+*.db-*
+*.sqlite
+*.sqlite-*
+*.sqlite3
+*.sqlite3-*
+*.atomic
+*.hornet.lock

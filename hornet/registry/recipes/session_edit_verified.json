@@ -1,0 +1,14 @@
+{
+  "name": "session_edit_verified",
+  "version": "1.0.0",
+  "description": "Back up, stage, inspect, validate, commit and verify a session edit.",
+  "steps": [
+    {"tool": "read_recipe", "uri": "recipe.edit.session_prepare_with_backup", "purpose": "Read the backup and session preparation guidance and follow it before editing."},
+    {"tool": "call_proxy_tool", "uri": "files.text.session_edit", "purpose": "Use replace with unique exact target_text and new_text, the session ID and current revision. Retain the returned revision after each successful change."},
+    {"tool": "call_proxy_tool", "uri": "files.text.session_edit", "purpose": "Show all staged text, paging as needed, and review every change against the request."},
+    {"tool": "call_proxy_tool", "uri": "files.text.session_edit", "purpose": "Validate using the latest revision. If validation or source synchronization fails, preserve the sidecar and report the conflict; do not claim success."},
+    {"tool": "call_proxy_tool", "uri": "files.text.session_edit", "purpose": "Commit with the current revision only after review and successful validation. Preserve evidence and report failures."},
+    {"tool": "call_proxy_tool", "uri": "files.text.read", "purpose": "Read back the committed file and run appropriate authorized behavioral checks."}
+  ],
+  "limits": "Guidance only; steps are not automatically executed. Syntax validation does not establish behavioral correctness. Source conflicts must be reviewed, not silently discarded."
+}

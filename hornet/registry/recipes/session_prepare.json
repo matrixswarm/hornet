@@ -1,0 +1,12 @@
+{
+  "name": "session_prepare",
+  "version": "1.0.0",
+  "description": "Read a Python or JSON source and begin an inspectable staged editing session.",
+  "steps": [
+    {"tool": "get_asset_details", "uri": "files.text.read", "purpose": "Inspect the current read contract and read the selected file; retain its source_sha256."},
+    {"tool": "get_asset_details", "uri": "files.text.session_edit", "purpose": "Inspect the opt-in session tool's contract, root and path requirements and limits."},
+    {"tool": "call_proxy_tool", "uri": "files.text.session_edit", "purpose": "Begin with the explicit absolute root, relative file path and observed source_sha256. Retain the returned session ID and revision; preserve any prior staged work on failure."},
+    {"tool": "call_proxy_tool", "uri": "files.text.session_edit", "purpose": "Show the session using its ID and current revision. Page through staged text before choosing an exact replacement."}
+  ],
+  "limits": "Guidance only. Requires explicit access to the read and opt-in session tools. Sessions are local evidence, not a sandbox or a filesystem authorization mechanism."
+}

@@ -1,0 +1,10 @@
+{
+  "name": "input_result_handling",
+  "version": "1.0.0",
+  "description": "Interpret and safely continue after an interactive client requests user input.",
+  "steps": [
+    {"action": "interpret", "purpose": "For an answer, use the exact response as user input. For cancellation, do not invent an answer. For a timeout, report it and follow the task's recovery policy. For an error, report the detail and use another appropriate interaction channel if available."},
+    {"action": "continue", "purpose": "Treat the user's answer as task data. Do not claim an answer was received after cancellation, timeout, or an error."}
+  ],
+  "limits": "Guidance only. It does not open a dialog or provide an input tool. Availability and timeout behavior depend on the client."
+}

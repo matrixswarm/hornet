@@ -6,6 +6,41 @@ not rebuild them.
 The release signature, manifest, package hashes and source commit are pinned in
 `scripts/publish_release.py`. A new version requires reviewed updates to those pins.
 
+## Prepare a release
+
+Choose the version and update the package version, changelog and matching
+starter references before freezing the source commit. Run the applicable tests,
+build the wheel and source distribution from that commit, and inspect both
+artifacts. Record only checks actually performed in `VALIDATION.json`, including
+the release `version` and exact `source_commit`. The index verification below
+checks CLI installation and the first-goal file contract; it does not exercise
+the Coder interface, a live model or a VM.
+
+If shipping a matching starter ZIP, assemble it in a clean staging directory
+from that source commit. Include the release wheel, `starter/` guides, examples,
+tools and worker at the paths expected by the guides, the pinned
+`pycdlib-1.14.0-py2.py3-none-any.whl` in `dependencies/`, matching public source
+under `source/hornet_cli/`, and release notes and validation evidence. Follow
+`starter/THIRD-PARTY.md` for the dependency. The Linux starter checks
+`CONTENTS.json`: it must map each bundled file path to an object containing
+its SHA-256 and byte count; the manifest itself is not self-hashed. Inspect the
+archive and test it in a fresh environment. This repository does not provide an
+automated starter ZIP builder. Do not include local environments, project data,
+credentials, VM images or private signing material.
+
+Create `SHA256SUMS` from the exact final release assets, including the wheel,
+source distribution, `VALIDATION.json` and starter ZIP if provided. The verifier
+expects lowercase SHA-256, two spaces and a plain filename on each line. Sign the
+manifest with the authorized release signing key and verify the detached
+`SHA256SUMS.asc` against the published public key and expected fingerprints.
+Attach the signed manifest, validation record and listed assets to the new
+immutable GitHub release. The workflow does not build or sign artifacts.
+
+After the release assets exist, update the verifier's version, source commit,
+manifest hash, package filenames and package hashes on `main` as a separate
+workflow change. Keep the signing identity pins unless an authorized key
+rotation is intended. Never replace signed assets or move an existing tag.
+
 ## Account setup
 
 Configure a pending GitHub Trusted Publisher in each index account:

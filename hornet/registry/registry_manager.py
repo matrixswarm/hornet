@@ -33,6 +33,8 @@ class RegistryManager:
                 raise ValueError(f"Duplicate registry name: {name}")
             if entry["type"] not in ("TOOL", "RECIPE"):
                 raise ValueError(f"Invalid asset type: {name}")
+            if 'opt_in' in entry and type(entry['opt_in']) is not bool:
+                raise ValueError(f"Invalid opt-in setting: {name}")
             relative = Path(entry["path"])
             if relative.is_absolute() or ".." in relative.parts:
                 raise ValueError(f"Asset paths must be root-relative: {name}")
@@ -53,7 +55,12 @@ class RegistryManager:
                 if alias in self.assets or alias in self.aliases:
                     raise ValueError(f"Duplicate registry alias: {alias}")
                 self.aliases[alias] = name
-        if allowed_uris is not None:
+        if allowed_uris is None:
+            # Assets marked opt-in are absent from discovery and execution until
+            # explicitly named in an allowlist, including on standalone servers.
+            self.assets = {name: asset for name, asset in self.assets.items() if not asset.get('opt_in', False)}
+            self.aliases = {alias: name for alias, name in self.aliases.items() if name in self.assets}
+        else:
             allowed = {self.aliases.get(name, name) for name in allowed_uris}
             unknown = allowed - self.assets.keys()
             if unknown:

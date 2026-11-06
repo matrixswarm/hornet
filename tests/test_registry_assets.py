@@ -90,6 +90,13 @@ class RegistryTests(unittest.TestCase):
                     if key in args:
                         args[key] = str(self.directory / Path(args[key]).name)
                 result = self.proxy.execute(asset["uri"], args)
+                if asset["uri"] == "math.linear_algebra.compute":
+                    try:
+                        import numpy  # noqa: F401 - optional runtime extra
+                    except ImportError:
+                        self.assertEqual(result["status"], "ERROR")
+                        self.assertIn("matrixswarm-hornet[math]", result["proxy_response"]["message"])
+                        continue
                 self.assertIn(result["status"], ("SUCCESS", "STAGED"), result)
 
     def set_example_files(self):

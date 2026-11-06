@@ -45,6 +45,7 @@ def chat(prompt, model, base_url, timeout=60, max_tokens=2048):
             raise HornetError("Model output hit the token limit; increase --max-tokens or shorten the request.")
         return text
     except error.HTTPError as exc:
+        exc.close()
         raise HornetError("Model endpoint returned HTTP {}. Check endpoint, model, and credentials.".format(exc.code)) from None
     except (error.URLError, TimeoutError, ConnectionError, OSError):
         raise HornetError("Cannot reach the model endpoint within the request limit; check its address and loaded model.") from None

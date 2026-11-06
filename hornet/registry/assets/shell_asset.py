@@ -3,7 +3,16 @@ from ._common import execute_guarded
 
 @execute_guarded
 def execute(args):
-    result = subprocess.run(args["command"], shell=True, capture_output=True, text=True,
+    selected = args.get("shell")
+    if selected == "powershell":
+        command, use_shell = ["powershell.exe", "-NoProfile", "-Command", args["command"]], False
+    elif selected == "bash":
+        command, use_shell = ["bash", "-c", args["command"]], False
+    elif selected is None:
+        command, use_shell = args["command"], True
+    else:
+        raise ValueError("Unsupported shell")
+    result = subprocess.run(command, shell=use_shell, capture_output=True, text=True,
                             timeout=args.get("timeout", 30), cwd=args.get("cwd"), errors="replace")
     limit = 32000
     return {"status": "SUCCESS" if result.returncode == 0 else "ERROR",

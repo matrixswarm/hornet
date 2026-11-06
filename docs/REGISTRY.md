@@ -113,9 +113,9 @@ discovery and receipts use the canonical names.
 | `data.json` | `wrap`, `query`, `edit`, `batch`, `validate_shape`, `move`, `ordered_edit` |
 | `languages.coding.python` | `interface.create`, `interface.stage`, `method.fill`, `method.stage`, `imports.add` |
 | `languages.coding.python.design_pattern` | `strategy`, `stage` |
-| `recipe` | `atomic_commit`, `precision_formatting` |
+| `recipe` | `atomic_commit`, `precision_formatting`; additional standalone recipes |
 
-There are 17 reviewed cell tools and two procedural recipes. JSON edits require
+There are 17 reviewed coding-cell tools. JSON edits require
 an existing JSON file. Interface creation supports a new Python file. The
 Strategy helper appends a context class to an existing module; it does not yet
 implement the planned multi-agent contract assembler described in
@@ -308,16 +308,138 @@ python -m hornet.registry --allow-uri files.text.read --allow-uri data.json.quer
 ```
 
 Configure your MCP client to launch that executable and arguments over stdio.
-The server exposes five gateway tools: `find_asset`, `get_asset_details`,
-`call_proxy_tool`, `read_recipe`, and `registry_status`. Native assets are loaded
+The server exposes `find_asset`, `get_asset_details`, `call_proxy_tool`,
+`read_recipe`, `registry_status`, and the standalone-only compatibility gateway
+`call_registry_tool`. Native assets are loaded
 from the installed package; the catalog is authoritative and SQLite is only an
 optional rebuildable index. No D: drive, prototype checkout or database is needed.
 
 Direct MCP calls operate on the MCP server host with that process's permissions.
 They do not receive Hornet cell scope, VM isolation, operation recovery or return
 manifests. Use the integrated coding-cell path when those guarantees are needed.
-Without `--allow-uri`, the standalone server exposes the full native catalog,
-including runtime shell/Python helpers; choose an explicit allowlist for the client.
+Without `--allow-uri`, the standalone server exposes the native catalog except
+assets explicitly marked opt-in, and includes runtime shell/Python helpers.
+Choose an explicit allowlist for the client.
+
+The compatibility gateway accepts `tool_name` and an `arguments` object that
+must include `capability_name`. Use `tool_name: "hornet"` and a canonical
+Hornet URI as the capability to call any permitted tool through the same schema
+and allowlist checks. For example:
+
+```json
+{"tool_name":"hornet","arguments":{"capability_name":"files.text.read","path":"/workspace/app.py"}}
+```
+
+It also accepts the prototype's 23 math wrapper names, where `capability_name`
+selects the operation even when it differs from the wrapper name. For legacy
+`process_matrix`, the old `operation` argument maps to the current `action`.
+`file_manager` with `read_file` supports UTF-8 and returns Hornet's bounded
+read-result object, not the prototype's whole-file string. Oversized results
+fail; use the canonical `files.text.read` tool with `start` and `end` to page.
+`terminal` with `execute` supports the prototype's Bash and PowerShell shell
+selection, defaulting to PowerShell on Windows and Bash elsewhere. Its output
+is bounded; it runs with the server user's permissions. `web_search` with
+`search` returns bounded titles and URLs, not the old result format or page
+contents; it requires the web tool's explicit opt-in described below. Legacy
+write and URL fetch calls are unsupported. `python_suite` with `execute` runs
+the supplied `code` through the existing Python probe in a subprocess with a
+15-second timeout; it has the server user's permissions and is not a sandbox.
+`user_input` with `ask` returns an `input_required` request for the client to
+present; it does not wait or open a dialog. This response is produced by the
+gateway itself without executing an asset, so an asset allowlist does not govern
+this client-only request. The timeout is metadata for the client, not a server
+wait. The old implicit-session editor
+actions use a different interface and are not wire-compatible; use the
+explicit session workflow described below.
+
+The response retains the `hornet_proxy_v1` wrapper with lowercase status and
+the Hornet result in `payload`; clients should inspect `isError` and treat
+`staged` as a preview, not a committed edit. The gateway cannot load code from
+legacy database rows and is not exposed to coding cells.
+
+### Persistent standalone editing sessions
+
+`files.text.session_edit` is opt-in and is not available to coding cells or
+Mission Control missions. Explicitly expose it, along with the read tool:
+
+```console
+python -m hornet.registry --allow-uri files.text.read --allow-uri files.text.session_edit
+```
+
+Use `files.text.read` on an existing UTF-8 Python or JSON file and retain its
+`source_sha256`. Call `files.text.session_edit` with `action: "begin"`, an
+absolute existing `root`, the file's path relative to that root, and the hash
+as `source_sha256`. Keep the returned `session` and `revision`. Each subsequent
+call supplies the same root, path and session plus the latest revision. `show`
+pages staged text with `offset`; `replace` replaces one unique `target_text`
+with `new_text`. Incomplete syntax may be staged, but `validate` and `commit`
+require valid Python or JSON. Commit preserves the UTF-8 BOM, when present.
+
+The adjacent sidecar persists across server restarts. Show remains available if
+the source changes, but another replace or commit refuses that conflict; inspect
+and resolve it manually. Each successful edit returns a new sidecar revision;
+stale revisions are rejected. A successful commit retains the sidecar as
+evidence. Inspect and remove unwanted sidecars and abandoned lock files manually
+after confirming no process is using them. A sidecar and its session ID are not
+an authorization mechanism. Paths and locks are not a sandbox, and a lock only
+coordinates cooperating Hornet writers. The tool runs with the standalone server
+user's permissions; share access only with trusted clients.
+
+## Opt-in web search
+
+The standalone `research.web.search` tool sends a query to DuckDuckGo and
+returns bounded titles and URLs, not page contents. It is absent from default
+discovery: explicitly allow its URI and set `HORNET_ENABLE_WEB_SEARCH=1` in
+the server environment. Queries are shared with the provider; search results
+are untrusted. Redirects and oversized responses are rejected. The provider
+may require interactive verification or temporarily refuse automated queries;
+these conditions are reported as errors. The legacy arbitrary-URL fetch and
+modal dialog are not exposed by this tool.
+
+## Legacy database snapshot
+
+When migrating the local prototype, keep `unified_registry.db` as local data;
+database files are ignored by Git because they can contain private paths. The
+snapshot in the prepared checkout retains its original tools and recipes and
+also has an index of the current catalog. Legacy rows are historical data:
+the Hornet registry does not load or execute their file paths. The JSON catalog
+and packaged assets are the authoritative registry for fresh installations.
+The prototype's overlapping shell, file and Python helpers are not copied into
+a second executable registry. The new tools and curated recipes are listed below.
+
+## Imported reference recipes
+
+The catalog includes `recipe.math.matrix_input_check` and
+`recipe.math.matrix_multiply_checked`, adapted from the local prototype. Read
+the input-check recipe referenced by the multiplication recipe, then inspect
+the current `math.linear_algebra.compute` contract before calling it. Recipe
+steps are guidance, not automatically expanded or executed. The historical
+IDs `matrix_input_check_v1` and `matrix_multiply_checked_v1` are aliases.
+Install the math extra with `python -m pip install '.[math]'` from a source
+checkout, or `python -m pip install 'matrixswarm-hornet[math]'` after a release
+containing it is published. Without NumPy the tool returns an error with install
+guidance. Inputs are limited to 10,000 elements per array and 256 per matrix
+axis; a product may contain at most 10,000 elements. Results use floating-point
+arithmetic and may require tolerance-aware checks.
+
+`recipe.input.result_handling` (alias `input_result_handling_v1`) describes how
+to handle an answer, cancellation, timeout or error from an interactive client;
+it does not supply a dialog or input tool. The prototype's modal-dialog recipes
+and machine-specific orientation instructions are not included.
+
+The prototype's staged editing workflows have been adapted to the opt-in Hornet
+session editor as `recipe.edit.session_prepare`,
+`recipe.edit.session_prepare_with_backup`, `recipe.edit.session_edit_verified`
+and `recipe.edit.session_workflow`. Their original recipe IDs remain aliases.
+Each referenced recipe must be read separately. Enable the desired recipes,
+`files.text.session_edit` and `files.text.read` explicitly in the standalone
+server allowlist; they are not coding-cell tools. These recipes use Hornet's
+exact-text replacement API rather than the prototype's stateful `python_suite`
+line-index and bulk-edit methods. The backup recipe instructs the operator to
+make and verify a copy separately; it cannot create one and does not contain
+the prototype's machine-specific path. Session IDs and lock files are not
+authorization or isolation. For Hornet's separate stateless read, preview,
+commit and verification workflow, see `recipe.atomic_commit`.
 
 ## Extending the registry
 
@@ -339,3 +461,12 @@ including runtime shell/Python helpers; choose an explicit allowlist for the cli
 This establishes discovery, small contracts and durable file commits. Distributed
 method submissions, contract UUID revisions and package assembly remain separate
 planned work.
+
+### Atomic editor create and delete
+
+`files.text.atomic_edit` supports `create`, `replace`, `insert`, and `delete`
+(a unique matching line). Creation refuses to overwrite an existing file. Guarded
+registry calls require `expected_sha256`; use the SHA-256 of empty bytes for a
+new file. Multiline replacements require a unique match; line-ending styles are
+treated equivalently for matching and replacement text follows the matched block's
+line endings. Python and JSON changes are validated before commit.

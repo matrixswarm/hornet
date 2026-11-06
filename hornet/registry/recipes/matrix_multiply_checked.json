@@ -1,0 +1,12 @@
+{
+  "name": "matrix_multiply_checked",
+  "version": "1.0.0",
+  "description": "Check inputs, calculate a matrix product, and verify the result.",
+  "steps": [
+    {"tool": "read_recipe", "uri": "recipe.math.matrix_input_check", "purpose": "Read and follow the input and dimension checks before calculating."},
+    {"tool": "get_asset_details", "uri": "math.linear_algebra.compute", "purpose": "Inspect the tool schema and current limits."},
+    {"tool": "call_proxy_tool", "uri": "math.linear_algebra.compute", "purpose": "Use operation matrix_multiplication with the actual A and B arrays. Inspect the returned status and result; on failure, correct the inputs rather than inventing an answer."},
+    {"action": "verify", "purpose": "Independently check the product dimensions and selected entries before reporting it."}
+  ],
+  "limits": "Guidance only; steps are not executed automatically. Floating-point calculations may require tolerance-aware verification."
+}

@@ -1,0 +1,10 @@
+{
+  "name": "session_prepare_with_backup",
+  "version": "1.0.0",
+  "description": "Create and verify an independent backup before beginning a staged edit.",
+  "steps": [
+    {"action": "backup", "purpose": "Before editing, make an independent copy of the target using an authorized backup method and location appropriate to the host. Verify the backup bytes; stop if the copy or verification fails."},
+    {"tool": "read_recipe", "uri": "recipe.edit.session_prepare", "purpose": "Read and follow the staged session preparation procedure after verifying the backup."}
+  ],
+  "limits": "Guidance only. The registry does not create or verify the backup through this recipe; no machine-specific path or shell command is supplied."
+}

@@ -50,7 +50,9 @@ def update_file(path, transform, *, commit=True, expected_sha256=None, create=Fa
             raise ValueError("Source changed since it was read; expected_sha256 does not match")
         content = transform(original.decode("utf-8-sig"))
         check_content(target, content)
-        encoded = content.encode("utf-8")
+        # read_text/transform operate on text without a UTF-8 signature, but
+        # editing an existing signed file must preserve its original bytes.
+        encoded = (b"\xef\xbb\xbf" if original.startswith(b"\xef\xbb\xbf") else b"") + content.encode("utf-8")
         fd, name = tempfile.mkstemp(prefix=target.name + ".", suffix=".atomic", dir=str(target.parent))
         shadow = Path(name)
         with os.fdopen(fd, "wb") as stream:
@@ -84,5 +86,10 @@ def execute_guarded(function):
         try:
             return function(args)
         except Exception as exc:
-            return {"status": "ERROR", "message": str(exc)}
+            result = {"status": "ERROR", "message": str(exc)}
+            if isinstance(exc, SyntaxError):
+                result["error_type"] = "python_syntax"
+                if exc.lineno is not None:
+                    result["line"] = exc.lineno
+            return result
     return wrapped

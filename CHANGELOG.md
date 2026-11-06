@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.19.0 — 2026-11-06
+
+- Add the native Hornet Coder interface for importing projects, reviewing project
+  maps, preparing coding missions and accepting isolated candidate revisions.
+- Save initialization checkpoints after each file part; validate source hashes,
+  exact summary paths and completeness before a project map can be accepted.
+- Request structured file descriptions with bounded correction and restrict
+  post-mission description context to changed files.
+- Extend the atomic editor with file creation, line deletion and multiline
+  replacement, retaining existing UTF-8 signatures and replacement line endings.
+- Add the standalone `capability_name` compatibility gateway, optional linear
+  algebra tools, and opt-in session-editing and web-search assets through the
+  existing registry. Preserve the CLI coding-cell scope and execution policy.
+- Document Coder setup, model configuration, review and optional VM checks.
+  Chat, the Tasks application and experimental conversational memory are not
+  included in this release.
+
 ## 0.18.1 — 2026-10-27
 
 Worker setup diagnostics maintenance release.

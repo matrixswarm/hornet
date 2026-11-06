@@ -57,15 +57,15 @@ class PreflightTests(unittest.TestCase):
         value.call = MagicMock(side_effect=[status, {'ok': True, 'output': json.dumps(facts)}])
         return value, facts
 
-    def test_false_ready_at_pete_root_stops_before_code_probe(self):
-        value, _ = self.connection(root='/home/pete/hornet_workspace')
+    def test_false_ready_at_user_root_stops_before_code_probe(self):
+        value, _ = self.connection(root='/home/example/hornet_workspace')
         with self.assertRaisesRegex(HornetError, 'workspace_root'):
             session.ready(value)
         self.assertEqual(value.call.call_count, 1)
 
     def test_nonstandard_account_is_refused(self):
         value, _ = self.connection()
-        value.user = 'pete'
+        value.user = 'example-user'
         result = value.preflight()
         self.assertFalse(result['ok'])
         self.assertFalse(result['preflight_checks']['account'])

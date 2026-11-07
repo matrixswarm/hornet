@@ -38,6 +38,12 @@ configured VM. The CLI starter below has its own VM workflow.
 If Hornet is useful to you, help fund its continued development at
 [ko-fi.com/matrixswarm](https://ko-fi.com/matrixswarm).
 
+To support the Hornet suite with Bitcoin, use this address:
+
+```text
+bc1qasqk5xn9j7cdddmeclxddzvym2sdv7d8g3xrtz
+```
+
 ---
 
 ## Original command-line workflow

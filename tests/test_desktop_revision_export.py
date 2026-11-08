@@ -43,7 +43,9 @@ class RevisionExportTests(unittest.TestCase):
         target.mkdir()
         with self.assertRaises(ex.DestinationChanged):
             self.ws.export_revision('demo', self.rev, self.parent, target)
-        self.assertEqual(list(self.parent.iterdir()), [target])
+        entries = list(self.parent.iterdir())
+        self.assertEqual(len(entries), 1)
+        self.assertTrue(entries[0].samefile(target))
 
     def test_publish_race_does_not_replace_empty_directory(self):
         target = ex.plan_export(self.ws, 'demo', self.rev, self.parent)
@@ -55,7 +57,9 @@ class RevisionExportTests(unittest.TestCase):
             self.ws.export_revision('demo', self.rev, self.parent, target)
         self.assertTrue(target.is_dir())
         self.assertEqual(list(target.iterdir()), [])
-        self.assertEqual(list(self.parent.iterdir()), [target])
+        entries = list(self.parent.iterdir())
+        self.assertEqual(len(entries), 1)
+        self.assertTrue(entries[0].samefile(target))
 
     def test_source_changes_are_not_published(self):
         copytree = ex.shutil.copytree

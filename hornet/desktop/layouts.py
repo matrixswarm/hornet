@@ -45,7 +45,7 @@ def scaffold(kind, name):
         if desktop:
             roles['src/app/ui/'] = 'Tk presentation. May call services; services must not import UI.'
         rules += ['Python modules use lowercase snake_case; classes use CapWords.',
-                  'Group tightly related classes in a module; prefer a dedicated file for a substantial independent class.',
+                  'Use one class per file by default; exceptions require explicit user instruction or a special-purpose file.',
                   'Each component owns its interfaces and abstract classes; use component-local interfaces/ and abstract_classes/ when needed.',
                   'Use src/app as the import package; src itself is not an import package.',
                   'Dependency direction: entry point/UI -> services -> domain; domain must not import UI.',

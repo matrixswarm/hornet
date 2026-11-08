@@ -73,8 +73,9 @@ def rename_revision(ws, project, revision, name):
     name = name.strip()
     if len(name) > 80 or any(not c.isprintable() for c in name):
         raise ValueError('Use a single-line revision name of up to 80 characters.')
-    if '[accepted]' in name.lower():
-        raise ValueError('The [ACCEPTED] marker is reserved for Hornet.')
+    for marker in ('[DEFAULT]', '[ACCEPTED]', '[WORKING]', '[LOCKED]'):
+        if marker.lower() in name.lower():
+            raise ValueError(f'The {marker} marker is reserved for Hornet.')
     records = ensure_display(ws, project)
     records[revision]['name'] = name
     write_json(ws.project(project) / 'revision-display.json', records)

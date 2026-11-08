@@ -123,8 +123,9 @@ class DesktopWorkspaceTests(unittest.TestCase):
         self.assertEqual((target/'main.py').read_bytes(), (source/'main.py').read_bytes())
         self.assertEqual((target/'.blueprint').read_bytes(), (source/'.blueprint').read_bytes())
         self.assertTrue((target/'.hornet-meta/revision.json').exists())
-        with self.assertRaisesRegex(ValueError, 'already exists'):
-            self.ws.export_revision('demo', self.rev, parent)
+        second = self.ws.export_revision('demo', self.rev, parent)
+        self.assertEqual(second.name, target.name + '-2')
+        self.assertEqual((second/'main.py').read_bytes(), (source/'main.py').read_bytes())
         with self.assertRaisesRegex(ValueError, 'outside'):
             self.ws.export_revision('demo', self.rev, self.ws.root)
         self.assertTrue(source.is_dir())

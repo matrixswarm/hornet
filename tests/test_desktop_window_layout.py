@@ -19,11 +19,13 @@ class DesktopWindowLayoutTests(unittest.TestCase):
         try:
             with tempfile.TemporaryDirectory() as directory:
                 app = App(root, Workspace(Path(directory)))
-                root.geometry('1000x650-2000-2000')
+                root.geometry('1040x720-2000-2000')
+                root.update()
+                app.settings_button.invoke()
                 root.update()
                 for name in ('projects', 'files', 'goal', 'auto_button', 'diagnose_button',
-                             'accept_mission_button', 'run_button', 'models', 'find_models',
-                             'blueprint_button', 'status_label', 'activity_indicator'):
+                             'project_menu_button', 'models', 'find_models',
+                             'settings_button', 'status_label', 'activity_indicator'):
                     widget = getattr(app, name)
                     with self.subTest(control=name):
                         self.assertTrue(widget.winfo_viewable(), name + ' is not visible')

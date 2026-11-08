@@ -32,7 +32,7 @@ attempts and uncertain-operation records for inspection.
 Use GitHub's private vulnerability reporting for this repository when available.
 If unavailable, open an issue requesting a private reporting channel without
 including exploit details, keys, passwords or private logs. This repository
-contains version 0.19.0; see the project releases for published versions and
+contains development version 0.20.0.dev0; see the project releases for published versions and
 their validation records. A release signature identifies publisher-approved bytes;
 it does not establish that every behavior is safe or that every dependency was
 audited.

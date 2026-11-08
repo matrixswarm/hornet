@@ -46,9 +46,12 @@ def execute(args):
             index = args["line_number"] - 1
             if not 0 <= index <= len(lines):
                 raise ValueError(f"line_number out of range: choose 1 through {len(lines) + 1} (1-based; last value appends)")
-            if index > 0 and not lines[index-1].endswith("\n"):
-                lines[index-1] += "\n"
-            lines.insert(index, args["new_text"].rstrip("\r\n") + "\n")
+            ending = re.search(r"\r\n|\r|\n", text)
+            newline = ending.group() if ending else "\n"
+            if index > 0 and not lines[index-1].endswith(("\n", "\r")):
+                lines[index-1] += newline
+            inserted = re.sub(r"\r\n|\r|\n", lambda _: newline, args["new_text"].rstrip("\r\n"))
+            lines.insert(index, inserted + newline)
         else:
             raise ValueError("Unknown action")
         return "".join(lines)

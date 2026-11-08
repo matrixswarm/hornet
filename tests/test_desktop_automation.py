@@ -111,6 +111,10 @@ class AutomationTests(unittest.TestCase):
         app.revision = ready
         app.update_gate()
         self.assertEqual(app.copy_button.state, 'normal')
+        self.assertEqual(app.auto_button.state, 'disabled')
+        from hornet.desktop.working_revision import create_working_revision
+        app.revision = create_working_revision(self.ws, 'demo', ready)
+        app.update_gate()
         self.assertEqual(app.auto_button.state, 'normal')
 
     @patch('hornet.desktop.app.messagebox.askyesno')
@@ -147,19 +151,24 @@ class AutomationTests(unittest.TestCase):
         storage = self.ws.fork('demo', ready)
         offline = self.ws.fork('demo', ready)
         directory = self.ws.project('demo')/'missions'; directory.mkdir()
-        first = {'id':'storage','state':'review','project':'demo','base_revision':ready,'final_revision':storage}
-        second = {'id':'offline','state':'review','project':'demo','base_revision':ready,'final_revision':offline}
-        write_json(directory/'a.json',first); write_json(directory/'b.json',second)
+        first = {'id':'a'*32,'state':'review','project':'demo','base_revision':ready,'final_revision':storage}
+        second = {'id':'b'*32,'state':'review','project':'demo','base_revision':ready,'final_revision':offline}
+        write_json(directory/('a'*32+'.json'),first); write_json(directory/('b'*32+'.json'),second)
         app=App.__new__(App); app.ws=self.ws; app.project='demo'; app.revision=storage; app.busy=False
         app.guard=lambda action: action()
         app.show_mission=MagicMock(); app.update_gate=MagicMock(); app.show_diagnosis=MagicMock()
         app.review_pending()
-        self.assertEqual(app.pending_mission['id'],'storage')
-        self.assertEqual(app.show_mission.call_args.args[0]['id'],'storage')
-        self.ws.trash('demo',offline)
+        self.assertEqual(app.pending_mission['id'],'a'*32)
+        self.assertEqual(app.show_mission.call_args.args[0]['id'],'a'*32)
+        with self.assertRaisesRegex(ValueError, 'required'):
+            self.ws.trash('demo',offline)
+        # Simulate an older externally moved revision. New UI Trash correctly
+        # refuses to remove saved-review dependencies.
+        trash = self.ws.project('demo')/'trash'; trash.mkdir(exist_ok=True)
+        self.ws.revision('demo',offline).rename(trash/offline)
         app.revision=ready
         app.review_pending()
-        self.assertEqual(app.pending_mission['id'],'storage')
+        self.assertEqual(app.pending_mission['id'],'a'*32)
 
     @patch('hornet.desktop.app.messagebox.askyesno')
     def test_context_trash_targets_clicked_revision_and_protects_accepted(self, confirm):

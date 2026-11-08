@@ -49,7 +49,20 @@ def update_file(path, transform, *, commit=True, expected_sha256=None, create=Fa
         if expected_sha256 is not None and expected_sha256 != before:
             raise ValueError("Source changed since it was read; expected_sha256 does not match")
         content = transform(original.decode("utf-8-sig"))
-        check_content(target, content)
+        try:
+            check_content(target, content)
+        except (SyntaxError, json.JSONDecodeError) as exc:
+            # Preserve the exact rejected candidate, never the original file.
+            # Unique names keep the initial failure and correction separately.
+            try:
+                fd, name = tempfile.mkstemp(prefix=target.name + ".", suffix=".atomic.err", dir=str(target.parent))
+                with os.fdopen(fd, "wb") as stream:
+                    stream.write(content.encode("utf-8"))
+                exc.atomic_error_path = name
+                exc.atomic_error_sha256 = digest(content.encode("utf-8"))
+            except OSError as capture_error:
+                exc.atomic_capture_error = str(capture_error)
+            raise
         # read_text/transform operate on text without a UTF-8 signature, but
         # editing an existing signed file must preserve its original bytes.
         encoded = (b"\xef\xbb\xbf" if original.startswith(b"\xef\xbb\xbf") else b"") + content.encode("utf-8")
@@ -87,6 +100,11 @@ def execute_guarded(function):
             return function(args)
         except Exception as exc:
             result = {"status": "ERROR", "message": str(exc)}
+            if getattr(exc, "atomic_error_path", None):
+                result["atomic_error_path"] = exc.atomic_error_path
+                result["atomic_error_sha256"] = exc.atomic_error_sha256
+            if getattr(exc, "atomic_capture_error", None):
+                result["atomic_capture_error"] = exc.atomic_capture_error
             if isinstance(exc, SyntaxError):
                 result["error_type"] = "python_syntax"
                 if exc.lineno is not None:

@@ -41,7 +41,13 @@ def write_json(path, data):
     path = Path(path)
     temp = path.with_name(path.name + '.' + uuid.uuid4().hex + '.tmp')
     temp.write_text(json.dumps(data, indent=2) + '\n', encoding='utf-8')
-    os.replace(temp, path)
+    from .cancellation import commit
+    try:
+        with commit():
+            os.replace(temp, path)
+    finally:
+        if temp.exists():
+            temp.unlink()
 
 
 def safe_path(root, name):
@@ -198,13 +204,29 @@ class Workspace:
             raise
 
     def _publish(self, stage, parent, mission):
+        marker = stage / '.LOCK'
+        if marker.is_symlink():
+            raise ValueError('Revision lock marker cannot be a symbolic link.')
+        if (stage.parent.parent / 'working-revisions.json').exists():
+            write_json(marker, {'owner': 'hornet-working-revision',
+                                'note': 'Immutable snapshot; only the explicit working head may run missions.'})
         write_json(stage / '.hornet-meta' / 'revision.json', {'parent': parent, 'mission': mission,
                    'created': datetime.now(timezone.utc).isoformat()})
         name = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S.%fZ') + '-' + uuid.uuid4().hex[:6]
-        stage.rename(stage.with_name(name))
+        from .revision_goals import revision_goals
+        write_json(stage / '.hornet-meta' / 'goals.json', revision_goals(stage, name, parent, mission))
+        from .cancellation import commit
+        from .mission_lease import mission_lease
+        with mission_lease(stage.parent.parent / '.revision-mutation'):
+            if parent is not None and not (stage.parent / parent).is_dir():
+                raise ValueError('The input revision was removed before publication. Start again.')
+            with commit():
+                stage.rename(stage.with_name(name))
         return name
 
     def fork(self, project, revision, changes=None, mission='Manual revision', blueprint=None, proposal=None, expected_context=None, shadow_updates=None):
+        from .cancellation import check
+        check()
         # Project creation and initialization use _publish directly. Every ordinary
         # copy or edit must start from an initialized, accepted project map.
         from .automation import require_ready
@@ -248,25 +270,10 @@ class Workspace:
             if stage.exists():
                 shutil.rmtree(stage)
 
-    def export_revision(self, project, revision, parent):
-        """Save a complete revision as a new folder outside the workspace."""
-        source = self.revision(project, revision)
-        parent = Path(parent).expanduser().resolve()
-        if not parent.is_dir() or parent == self.root or parent.is_relative_to(self.root):
-            raise ValueError('Choose a folder outside the Hornet workspace.')
-        destination = parent / (project + '-' + revision)
-        if destination.exists() or destination.is_symlink():
-            raise ValueError('The export folder already exists. Choose a different destination.')
-        stage = parent / ('.hornet-export-' + uuid.uuid4().hex)
-        try:
-            shutil.copytree(source, stage, symlinks=True)
-            if destination.exists() or destination.is_symlink():
-                raise ValueError('The export folder already exists. Choose a different destination.')
-            stage.rename(destination)
-            return destination
-        finally:
-            if stage.exists():
-                shutil.rmtree(stage)
+    def export_revision(self, project, revision, parent, destination=None):
+        """Save a complete copy, using a numbered name without replacing data."""
+        from .revision_export import export_revision
+        return export_revision(self, project, revision, parent, destination)
 
     def trash_project(self, project):
         """Move a whole project out of the workspace list, preserving its files."""
@@ -283,14 +290,21 @@ class Workspace:
         return dest
 
     def trash(self, project, revision):
-        source = self.revision(project, revision)
-        if len(self.revisions(project)) <= 1:
-            raise ValueError('Keep at least one revision.')
-        trash = self.project(project) / 'trash'
-        trash.mkdir(exist_ok=True)
-        source.rename(trash / revision)
+        from .mission_lease import mission_lease
+        from .working_revision import assert_trash_safe
+        with mission_lease(self.project(project) / '.candidate-operation'):
+            assert_trash_safe(self, project, revision)
+            source = self.revision(project, revision)
+            if len(self.revisions(project)) <= 1:
+                raise ValueError('Keep at least one revision.')
+            trash = self.project(project) / 'trash'
+            if trash.is_symlink():
+                raise ValueError('Project trash cannot be a symbolic link.')
+            trash.mkdir(exist_ok=True)
+            with mission_lease(self.project(project) / '.revision-mutation'):
+                source.rename(trash / revision)
 
-    def mission_context(self, project, revision, selected, mission, new_files=None):
+    def mission_context(self, project, revision, selected, mission, new_files=None, scoped_shadows=False):
         root = self.revision(project, revision)
         new_files = new_files or []
         if not mission.strip() or not (selected or new_files):
@@ -304,6 +318,8 @@ class Workspace:
             if path.exists():
                 raise ValueError('New file already exists; select it in the file tree instead: ' + name)
         shadows = json.loads((root / '.hornet-meta' / 'shadows.json').read_text())
+        if scoped_shadows:
+            shadows = {name: shadows[name] for name in selected if name in shadows}
         payload = {'mission': mission, 'blueprint': read_blueprint(root),
                    'shadows': shadows, 'files': {name: read_source(root, name) for name in selected},
                    'new_files': new_files}

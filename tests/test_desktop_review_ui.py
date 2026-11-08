@@ -18,6 +18,9 @@ class FakeButton:
 
 class ReviewGateTests(unittest.TestCase):
     def setUp(self):
+        working = patch('hornet.desktop.working_revision.is_working', return_value=True)
+        self.working = working.start()
+        self.addCleanup(working.stop)
         self.app = App.__new__(App)
         self.app.ws = object()
         self.app.project = 'alpha'
@@ -58,6 +61,15 @@ class ReviewGateTests(unittest.TestCase):
         self.assertEqual(self.app.accept_mission_button.state, 'disabled')
         self.assertEqual(self.app.auto_button.state, 'normal')
 
+    @patch('hornet.desktop.app.require_ready', return_value={'status': 'ready'})
+    def test_locked_selection_disables_mission_but_preserves_inspection(self, _ready):
+        self.working.return_value = False
+        self.app.update_gate()
+        self.assertEqual(self.app.auto_button.state, 'disabled')
+        self.assertEqual(self.app.diagnose_button.state, 'normal')
+        self.assertEqual(self.app.copy_button.state, 'normal')
+        self.assertEqual(self.app.accept_mission_button.state, 'normal')
+
     def test_map_status_distinguishes_incomplete_and_ready_drafts(self):
         self.app.show = MagicMock()
         self.app.tabs = MagicMock()
@@ -67,7 +79,9 @@ class ReviewGateTests(unittest.TestCase):
                  'unreviewed': ['main.py'], 'issues': {}}
         self.app.show_initialization(draft)
         self.assertIn('incomplete', self.app.status.set.call_args.args[0].lower())
-        draft['unreviewed'] = []
+        draft.update(unreviewed=[], included=['main.py'], excluded=[],
+                     source_sha256={'main.py': 'hash'}, summaries={'main.py': 'Purpose'},
+                     blueprint={'purpose': 'Test'})
         self.app.show_initialization(draft)
         self.assertIn('review', self.app.status.set.call_args.args[0].lower())
         self.assertIn('accept', self.app.status.set.call_args.args[0].lower())

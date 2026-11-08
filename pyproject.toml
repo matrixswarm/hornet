@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "matrixswarm-hornet"
-version = "0.19.0"
+version = "0.20.0.dev0"
 description = "Local-first coding projects and workflows with bounded model context"
 readme = "README.md"
 license = "AGPL-3.0-only"

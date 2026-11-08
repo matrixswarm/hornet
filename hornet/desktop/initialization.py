@@ -60,6 +60,10 @@ def _apply_blueprint(blueprint, proposed):
             raise ValueError('Initialization returned invalid blueprint text.')
 
 
+from .mission_lease import project_operation
+
+
+@project_operation
 def make_draft(ws, project, revision, describe, progress=None, included=None, resume=True):
     from .automation import inventory, read_state, require_ready
     root = ws.revision(project, revision)
@@ -103,7 +107,8 @@ def make_draft(ws, project, revision, describe, progress=None, included=None, re
             history.mkdir(exist_ok=True)
             previous = json.loads(draft_path.read_text(encoding='utf-8'))
             write_json(history / (uuid.uuid4().hex + '.json'), previous)
-        draft = {'version': 2, 'project': project, 'revision': revision,
+        import uuid
+        draft = {'progress_run_id': uuid.uuid4().hex, 'version': 2, 'project': project, 'revision': revision,
                  'source_sha256': before, 'base_blueprint': original_blueprint,
                  'accepted_at_start': accepted, 'blueprint': blueprint,
                  'included': included, 'excluded': excluded, 'summaries': {},
@@ -113,6 +118,8 @@ def make_draft(ws, project, revision, describe, progress=None, included=None, re
         write_json(draft_path, draft)
         if source_changed and progress:
             progress('Project files changed; restarting initialization for all included files. Previous draft archived.')
+    from .understanding_progress import UnderstandingProgress
+    checkpoints = UnderstandingProgress(ws.project(project), draft)
     shadows = json.loads((root / '.hornet-meta' / 'shadows.json').read_text(encoding='utf-8'))
     # Do not send excluded file names or hashes in the inventory.
     sent_inventory = {name: before[name] for name in included}
@@ -130,15 +137,20 @@ def make_draft(ws, project, revision, describe, progress=None, included=None, re
         chunk_state = draft['chunks'].setdefault(name, {})
         for number, part in enumerate(parts, 1):
             key = str(number)
+            checkpoint = checkpoints.begin(name, number, digest)
             if key in chunk_state:
+                checkpoints.completed(checkpoint, name, number, digest, chunk_state[key])
                 continue
             if progress:
-                progress(f'Initializing file {index} of {len(included)}: {name}, part {number} of {len(parts)}')
+                progress(f'Understanding file {index} of {len(included)}: {name}, part {number} of {len(parts)}')
             payload = {'project': project, 'blueprint': draft['blueprint'],
                        'inventory': sent_inventory, 'structural_shadows': {name: shadows.get(name, {})},
                        'files': {name: part}, 'batch': index, 'total_batches': len(included),
                        'file_part': {'path': name, 'number': number, 'total': len(parts)}}
+            from .cancellation import check
+            check()
             response = describe(payload)
+            check()
             if not isinstance(response, dict) or not isinstance(response.get('summaries'), dict):
                 raise ValueError('Initialization returned an invalid summary batch; progress was saved.')
             summaries = response['summaries']
@@ -148,11 +160,13 @@ def make_draft(ws, project, revision, describe, progress=None, included=None, re
             if not isinstance(summary, str) or not summary.strip() or len(summary) > 4000:
                 draft['issues'][name] = f'Model did not provide a valid summary for part {number} of {len(parts)}.'
                 write_json(draft_path, draft)
+                checkpoints.deferred(checkpoint, draft['issues'][name])
                 break
             _apply_blueprint(draft['blueprint'], response.get('blueprint'))
             chunk_state[key] = summary.strip()
             draft['issues'].pop(name, None)
             write_json(draft_path, draft)
+            checkpoints.completed(checkpoint, name, number, digest, chunk_state[key])
         if len(chunk_state) == len(parts):
             # Keep a bounded summary while retaining all part descriptions in the draft.
             budget = max(1, (3900 // len(parts)) - 16)
@@ -169,6 +183,7 @@ def make_draft(ws, project, revision, describe, progress=None, included=None, re
     draft['blueprint']['status'] = 'agent draft; review before accepting'
     draft['unreviewed'] = sorted(set(included) - set(draft['summaries']))
     write_json(draft_path, draft)
+    checkpoints.finish(draft)
     return draft
 
 

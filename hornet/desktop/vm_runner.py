@@ -64,29 +64,47 @@ def run_python(ws, project, revision, command):
     if len(argv) > 30 or sum(map(len, argv)) > 4000:
         raise ValueError('The run command is too long.')
     root = ws.revision(project, revision)
+    from . import worker_vm
+    worker_config = worker_vm.config_path(ws)
+    copy_limit = worker_vm.MAX_COPY_BYTES if worker_config else MAX_COPY_BYTES
     files, hashes, total = {}, {}, 0
     for name in source_files(root):
         path = safe_path(root, name)
+        if total + path.stat().st_size > copy_limit:
+            raise ValueError('VM project copy exceeds its configured size limit.')
         data = path.read_bytes()
         total += len(data)
-        if total > MAX_COPY_BYTES:
-            raise ValueError('This first VM runner supports project copies up to 55 KB.')
+        if total > copy_limit:
+            raise ValueError('VM project copy exceeds the configured limit of %s bytes.' % copy_limit)
+        if worker_config and len(files) >= worker_vm.MAX_FILES:
+            raise ValueError('VM project copy exceeds 2000 files.')
         files[name] = base64.b64encode(data).decode()
         hashes[name] = hashlib.sha256(data).hexdigest()
+    from .vm_project import apply_template
+    files, template = apply_template(ws, project, files)
+    if template and not worker_config:
+        raise ValueError('Project templates require the configured pinned VM worker.')
+    if len(files) > worker_vm.MAX_FILES or sum(len(base64.b64decode(value)) for value in files.values()) > copy_limit:
+        raise ValueError('Prepared VM project exceeds its file-count or copy-size limit.')
     run_id = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S.%fZ') + '-' + uuid.uuid4().hex[:8]
     payload = {'run_id': run_id, 'files': files, 'argv': argv}
-    encoded = base64.b64encode(json.dumps(payload).encode()).decode()
-    remote = 'python3 -c ' + shlex.quote(REMOTE_PROGRAM) + ' ' + shlex.quote(encoded)
-    try:
-        result = subprocess.run([VM_TOOL, 'exec', VM_NAME, remote], capture_output=True, text=True, timeout=150)
-    except (FileNotFoundError, subprocess.TimeoutExpired) as exc:
-        raise ValueError('Could not start the test VM runner: ' + str(exc)) from exc
-    records = [line.removeprefix('HORNET_RUN_RESULT=') for line in result.stdout.splitlines()
-               if line.startswith('HORNET_RUN_RESULT=')]
-    if result.returncode or not records:
-        detail = (result.stderr or result.stdout).strip()[-2000:]
-        raise ValueError('Test VM run did not complete. ' + detail)
-    outcome = json.loads(records[-1])
+    if worker_config:
+        outcome = worker_vm.run_copy(worker_config, files, argv)
+    else:
+        encoded = base64.b64encode(json.dumps(payload).encode()).decode()
+        remote = 'python3 -c ' + shlex.quote(REMOTE_PROGRAM) + ' ' + shlex.quote(encoded)
+        try:
+            result = subprocess.run([VM_TOOL, 'exec', VM_NAME, remote], capture_output=True, text=True, timeout=150)
+        except (FileNotFoundError, subprocess.TimeoutExpired) as exc:
+            raise ValueError('Could not start the test VM runner: ' + str(exc)) from exc
+        records = [line.removeprefix('HORNET_RUN_RESULT=') for line in result.stdout.splitlines()
+                   if line.startswith('HORNET_RUN_RESULT=')]
+        if result.returncode or not records:
+            detail = (result.stderr or result.stdout).strip()[-2000:]
+            raise ValueError('Test VM run did not complete. ' + detail)
+        outcome = json.loads(records[-1])
+    if template:
+        outcome['template'] = template
     outcome.update({'id': run_id, 'project': project, 'revision': revision,
                     'command': argv, 'source_sha256': hashes,
                     'created': datetime.now(timezone.utc).isoformat()})
@@ -127,6 +145,11 @@ def diagnostic_for_mission(ws, project, revision):
                for name in source_files(root)}
     if current != data.get('source_sha256'):
         raise ValueError('Files changed after the last VM run. Run this revision again.')
+    from .vm_project import apply_template
+    current_files = {name: base64.b64encode(safe_path(root, name).read_bytes()).decode() for name in source_files(root)}
+    _, template = apply_template(ws, project, current_files)
+    if template != data.get('template'):
+        raise ValueError('VM template or overlay settings changed after the last run. Run this revision again.')
     diagnostic = {key: data[key] for key in ('id', 'command', 'exit_code', 'timed_out',
                                              'stdout', 'stderr', 'stdout_truncated', 'stderr_truncated')}
     if run_hint(data):

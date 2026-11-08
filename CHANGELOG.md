@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased - Coder development update
+
+- Add goal-scoped planning, dependency-aware execution, resumable mission
+  checkpoints and a bounded revision journal with explicit read-only context.
+- Resolve insertions by start/end or unique exact anchors while retaining
+  atomic edit validation, source hashes and review before acceptance.
+- Improve project/revision selection, cancellation, attention indicators,
+  prompt resizing and safe numbered revision exports with confirmation.
+- Keep Chat and Task Runner outside this Coder update. Native drag-and-drop
+  is deferred; exports use the explicit Save revision folder chooser.
+- Preserve the published 0.19.0 release and publisher pins. This source tree
+  remains development version 0.20.0.dev0, not a new packaged release.
+
 ## 0.19.0 — 2026-11-06
 
 - Add the native Hornet Coder interface for importing projects, reviewing project

@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased - Coder development update
+## 0.20.0 - 2026-11-08
 
 - Add goal-scoped planning, dependency-aware execution, resumable mission
   checkpoints and a bounded revision journal with explicit read-only context.
@@ -10,8 +10,7 @@
   prompt resizing and safe numbered revision exports with confirmation.
 - Keep Chat and Task Runner outside this Coder update. Native drag-and-drop
   is deferred; exports use the explicit Save revision folder chooser.
-- Preserve the published 0.19.0 release and publisher pins. This source tree
-  remains development version 0.20.0.dev0, not a new packaged release.
+- Include matching starter guides and retain the published 0.19.0 release.
 
 ## 0.19.0 — 2026-11-06
 

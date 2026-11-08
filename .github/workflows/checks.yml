@@ -29,7 +29,14 @@ jobs:
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: ${{ matrix.python }}
-      - name: Unit tests (no model or VM required)
+      - name: Install virtual display (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends xvfb xauth
+      - name: Unit tests (Linux virtual display)
+        if: runner.os == 'Linux'
+        run: xvfb-run -a python -m unittest discover -s tests -v
+      - name: Unit tests (Windows)
+        if: runner.os == 'Windows'
         run: python -m unittest discover -s tests -v
 
   package:
@@ -46,6 +53,8 @@ jobs:
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: '3.13'
+      - name: Install virtual display
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends xvfb xauth
       - run: python -m pip install build twine
       - run: python -m build
       - run: python -m twine check --strict dist/*
@@ -57,7 +66,7 @@ jobs:
           "$RUNNER_TEMP/hornet-env/bin/python" -m pip check
           "$RUNNER_TEMP/hornet-env/bin/hornet" --version
           cd "$RUNNER_TEMP"
-          "$RUNNER_TEMP/hornet-env/bin/python" -m unittest discover -s "$GITHUB_WORKSPACE/tests" -v
+          xvfb-run -a "$RUNNER_TEMP/hornet-env/bin/python" -m unittest discover -s "$GITHUB_WORKSPACE/tests" -v
       - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: python-distributions

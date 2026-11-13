@@ -6,7 +6,7 @@ Hornet now separates three things: the user's goal, the agent's proposed subgoal
 
 1. Describe the mission and run it.
 2. The agent proposes a bounded goal tree, breaking work into small actionable leaves with file scopes, dependencies, and observable success criteria.
-3. By default, review that plan and choose **Approve plan & continue**. The **Review agent plan before execution** checkbox in Mission options makes that review optional. Turning it off does not turn off goal decomposition or scope checks.
+3. By default, review that plan and choose **Approve plan & continue**. The **Review plan** checkbox in Mission options makes that review optional. Turning it off does not turn off goal decomposition or scope checks.
 4. Hornet works through actionable leaves in dependency order. Each leaf gets its own scoped model request, durable proposal checkpoint, and tagged revision publication. On resume, verified completed leaves are reused rather than re-requested. Each atomic edit must name an approved leaf goal. Hornet checks its file scope and prerequisite ordering, then records actual edit receipts and file hashes.
 5. Review the resulting candidate and explicitly accept it. Plan approval is not final acceptance. Skipped or failed tests are never represented as successful verification. Leaf evidence remains pending human review or not demonstrated.
 

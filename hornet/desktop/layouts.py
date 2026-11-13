@@ -7,6 +7,7 @@ LAYOUTS = {
     'python-desktop': ('Python · desktop app', 'A native Tk app. UI handles presentation; services own behavior; domain contains framework-independent rules.'),
     'Web': ('Web · static site', 'HTML entry point with separate CSS and JavaScript assets. No server framework or build system.'),
     'php-psr4': ('PHP · PSR-4 foundation', 'Composer autoloading with App\\ mapped to src/. This is framework-independent, not a complete Laminas application.'),
+    'calculator-example': ('Example · calculator', 'A small working Python calculator with tests, ready for a practice mission.'),
 }
 
 
@@ -19,7 +20,14 @@ def scaffold(kind, name):
         'Keep entry points thin and project dependencies explicit.',
         'Review the blueprint when adding a responsibility or changing a dependency direction.',
     ]
-    if kind == 'Python':
+    if kind == 'calculator-example':
+        files = {
+            'calculator.py': '"""A small calculator for practicing Hornet missions."""\n\n\ndef add(a, b):\n    return a + b\n\n\nif __name__ == "__main__":\n    print("2 + 3 =", add(2, 3))\n',
+            'test_calculator.py': 'import unittest\nfrom calculator import add\n\n\nclass CalculatorTests(unittest.TestCase):\n    def test_add(self):\n        self.assertEqual(add(2, 3), 5)\n        self.assertEqual(add(-1, 1), 0)\n\n\nif __name__ == "__main__":\n    unittest.main()\n',
+        }
+        roles = {'calculator.py': 'Calculator functions and a small command-line demonstration.',
+                 'test_calculator.py': 'Checks for calculator behavior.'}
+    elif kind == 'Python':
         files = {'main.py': '"""Project entry point."""\n\n\ndef main():\n    print("Ready for your first mission")\n\n\nif __name__ == "__main__":\n    main()\n'}
         roles = {'main.py': 'Initial entry point and small utility behavior.'}
     elif kind in {'python-package', 'python-desktop'}:
@@ -76,7 +84,9 @@ def scaffold(kind, name):
                   'Each component owns its interfaces in Interfaces/ and abstract classes in AbstractClasses/; use matching PSR-4 namespaces.',
                   'Only public/ is served; src/, vendor/ and configuration are not the document root.',
                   'This is not a Zend or Laminas framework skeleton.']
-    if kind in {'python-package', 'python-desktop'}:
+    if kind == 'calculator-example':
+        commands = 'In the worker VM:\n\n    python calculator.py\n    python -m unittest test_calculator\n\nTry a mission such as adding a subtract function and its tests.\n'
+    elif kind in {'python-package', 'python-desktop'}:
         commands = 'In the worker VM:\n\n    python -m pip install -e .\n    python -m app\n    python -m unittest discover -s tests\n'
         if kind == 'python-desktop':
             commands += '\nThe desktop starter requires Tk and a graphical session.\n'

@@ -200,6 +200,36 @@ class DesktopShellTests(unittest.TestCase):
         self.app.preview()
         self.assertEqual(self.app.views['Source'].get('1.0', 'end').strip(), '')
 
+    def test_initial_window_fits_small_screen(self):
+        self.root.deiconify()
+        self.root.update()
+        self.assertLessEqual(self.root.winfo_width(), self.root.winfo_screenwidth())
+        self.assertLessEqual(self.root.winfo_height(), self.root.winfo_screenheight())
+        if self.root.winfo_screenwidth() == 1024 and self.root.winfo_screenheight() == 768:
+            self.app.options_button.invoke()
+            self.app.settings_button.invoke()
+            self.root.update()
+            for widget in (self.app.goal, self.app.auto_button, self.app.options_button, self.app.models):
+                self.assertLessEqual(widget.winfo_rootx() + widget.winfo_width(),
+                                     self.root.winfo_rootx() + self.root.winfo_width())
+                self.assertLessEqual(widget.winfo_rooty() + widget.winfo_height(),
+                                     self.root.winfo_rooty() + self.root.winfo_height())
+
+    def test_calculator_example_is_opt_in_and_working(self):
+        self.assertEqual(self.ws.list_projects(), ['demo'])
+        menu = self.root.nametowidget(self.app.new_menu_button.cget('menu'))
+        labels = [menu.entrycget(i, 'label') for i in range(menu.index('end') + 1)]
+        self.assertIn('Calculator example...', labels)
+        with patch('hornet.desktop.app.simpledialog.askstring', return_value='calculator'):
+            self.app.new_calculator_example()
+        self.root.update()
+        root = self.ws.revision('calculator', self.app.revision)
+        namespace = {}
+        exec(compile((root / 'calculator.py').read_text(encoding='utf-8'), 'calculator.py', 'exec'), namespace)
+        self.assertEqual(namespace['add'](2, 3), 5)
+        self.assertTrue((root / 'test_calculator.py').is_file())
+        self.assertEqual(self.ws.list_projects(), ['calculator', 'demo'])
+
     def test_small_window_keeps_mission_controls_inside_root(self):
         self.ready()
         self.root.geometry('1040x720')
@@ -208,10 +238,20 @@ class DesktopShellTests(unittest.TestCase):
         self.app.options_button.invoke()
         self.app.settings_button.invoke()
         self.root.update()
-        for widget in (self.app.goal, self.app.auto_button, self.app.options_button, self.app.models):
+        for widget in (self.app.goal, self.app.auto_button, self.app.options_button, self.app.models,
+                       self.app.diagnose_button, self.app.review_button, self.app.prompt_resize_handle):
             self.assertTrue(widget.winfo_ismapped())
             self.assertLessEqual(widget.winfo_rooty()+widget.winfo_height(), self.root.winfo_rooty()+self.root.winfo_height())
             self.assertLessEqual(widget.winfo_rootx()+widget.winfo_width(), self.root.winfo_rootx()+self.root.winfo_width())
+        for widget in (self.app.auto_button, self.app.options_button, self.app.diagnose_button,
+                       self.app.review_button, self.app.prompt_resize_handle):
+            self.assertGreaterEqual(widget.winfo_width(), widget.winfo_reqwidth())
+        # Opening options must not hide or clip its own controls either.
+        for row in self.app.options_panel.winfo_children():
+            for widget in row.winfo_children():
+                self.assertTrue(widget.winfo_ismapped())
+                self.assertLessEqual(widget.winfo_rooty()+widget.winfo_height(), self.root.winfo_rooty()+self.root.winfo_height())
+                self.assertLessEqual(widget.winfo_rootx()+widget.winfo_width(), self.root.winfo_rootx()+self.root.winfo_width())
 
 
 if __name__ == '__main__':

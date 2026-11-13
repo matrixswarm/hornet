@@ -12,6 +12,14 @@ and prompts selected for a mission are sent to the configured model server.
 
 ## Start Hornet Coder
 
+To choose between Coder and Distil at startup, run `hornet-launcher` after
+installing Hornet with the Distil extra (`pip install '.[distil]'`), or run
+`python -m hornet.launcher` from the checkout using that environment. Choose
+an application in the launcher to open it.
+
+In Coder, **+ New → Calculator example** creates an optional working sample
+with tests. You can use it to practice a mission without importing your own code.
+
 Install Python 3.9 or newer with Tk support. On Ubuntu/Debian, install `git`,
 `python3`, `python3-venv`, and `python3-tk`, then in the cloned repository run:
 
@@ -32,6 +40,18 @@ Projects default to `~/.hornet/projects` and can contain private source,
 prompts and model outputs. Back them up separately from this repository. A VM
 is not needed to launch Coder; its optional test runner requires a separately
 configured VM. The CLI starter below has its own VM workflow.
+
+## Hornet Distil
+
+Distil turns an ongoing chat into a focused document, then lets you continue
+from that distilled context. It includes manual revisions, text/Markdown import,
+line numbers, and PDF/Text/Markdown export. The full active chat is sent only to
+your configured model server. Distil's data defaults to `~/hornet_distil` and
+should be backed up separately from the code.
+
+Install the optional GUI with `python -m pip install '.[distil]'`, then run
+`hornet-distil`. See the [Distil guide](docs/DISTIL.md) for setup, model settings,
+storage, and recovery behavior.
 
 ## Support Hornet
 

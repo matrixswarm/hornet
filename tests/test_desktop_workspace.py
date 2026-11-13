@@ -1,5 +1,7 @@
 import json
+import os
 from pathlib import Path
+import shutil
 from tempfile import TemporaryDirectory
 import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -12,6 +14,11 @@ class DesktopWorkspaceTests(unittest.TestCase):
     def setUp(self):
         self.temp = TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
+        if os.name == 'nt':
+            # Project trash can contain long goal paths even when the temp root
+            # itself is short. Remove that tree through the extended-path API.
+            extended = '\\\\?\\' + str(Path(self.temp.name) / 'workspace')
+            self.addCleanup(lambda: shutil.rmtree(extended) if os.path.exists(extended) else None)
         self.ws = Workspace(Path(self.temp.name) / 'workspace')
         base = self.ws.create('demo')
         from hornet.desktop.automation import make_initialization_draft, accept_initialization
@@ -37,12 +44,20 @@ class DesktopWorkspaceTests(unittest.TestCase):
         self.assertEqual(before, self.ws.revisions('demo'))
         self.assertFalse(any(p.name.startswith('.working') for p in (self.ws.project('demo') / 'revisions').iterdir()))
 
-    def test_paths_and_links(self):
+    def test_invalid_paths_are_rejected(self):
         root = self.ws.revision('demo', self.rev)
         for name in ('../escape', '/tmp/escape', '.env', 'a/../../escape', 'C:/file', 'a\\file', '.blueprint'):
             with self.subTest(name=name), self.assertRaises(ValueError):
                 safe_path(root, name)
-        (root / 'link.py').symlink_to(root / 'main.py')
+
+    def test_source_symlinks_are_rejected(self):
+        root = self.ws.revision('demo', self.rev)
+        try:
+            (root / 'link.py').symlink_to(root / 'main.py')
+        except OSError as exc:
+            if os.name == 'nt' and getattr(exc, 'winerror', None) == 1314:
+                self.skipTest('Windows account cannot create symbolic links')
+            raise
         self.assertNotIn('link.py', list(source_files(root)))
         with self.assertRaises(ValueError):
             safe_path(root, 'link.py')
@@ -83,7 +98,12 @@ class DesktopWorkspaceTests(unittest.TestCase):
         outside = Path(self.temp.name) / 'outside'
         outside.mkdir()
         (outside / 'keep').write_text('safe')
-        (self.ws.projects / 'link').symlink_to(outside, target_is_directory=True)
+        try:
+            (self.ws.projects / 'link').symlink_to(outside, target_is_directory=True)
+        except OSError as exc:
+            if os.name == 'nt' and getattr(exc, 'winerror', None) == 1314:
+                self.skipTest('Windows account cannot create symbolic links')
+            raise
         with self.assertRaisesRegex(ValueError, 'symbolic link'):
             self.ws.trash_project('link')
         self.assertEqual((outside / 'keep').read_text(), 'safe')

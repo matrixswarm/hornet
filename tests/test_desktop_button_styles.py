@@ -81,6 +81,8 @@ class ButtonStyleTests(unittest.TestCase):
         self.root.deiconify()
         self.root.update()
         tabs=self.app.tabs
+        if not tabs.winfo_ismapped() or tabs.winfo_width() <= 1:
+            self.skipTest('Tk did not map the notebook in this desktop session')
         def bounds():
             found={}
             # Identify pixels belonging to each tab; this measures the rendered

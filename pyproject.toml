@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "matrixswarm-hornet"
-version = "0.20.0"
+version = "0.30.0"
 description = "Local-first coding projects and workflows with bounded model context"
 readme = "README.md"
 license = "AGPL-3.0-only"
@@ -26,6 +26,7 @@ classifiers = [
 
 [project.optional-dependencies]
 math = ["numpy>=1.24,<3"]
+distil = ["PyQt6>=6.5", "requests>=2.28"]
 
 [project.urls]
 Homepage = "https://github.com/matrixswarm/hornet"
@@ -35,6 +36,8 @@ Issues = "https://github.com/matrixswarm/hornet/issues"
 Changelog = "https://github.com/matrixswarm/hornet/blob/main/CHANGELOG.md"
 
 [project.gui-scripts]
+hornet-launcher = "hornet.launcher:main"
+hornet-distil = "hornet.distil.app:main"
 hornet-desktop = "hornet.desktop.app:main"
 hornet-coder = "hornet.coder:main"
 

@@ -19,8 +19,14 @@ def build_shell(app):
     root.title('Hornet Coder | ' + __version__)
     from .app_icon import install_window_icon
     install_window_icon(root)
-    root.geometry('1380x900')
-    root.minsize(1040, 720)
+    screen_width = root.winfo_screenwidth()
+    screen_height = root.winfo_screenheight()
+    initial_width = min(1380, max(1, screen_width - 24))
+    initial_height = min(900, max(1, screen_height - 120))
+    root.geometry('%dx%d+%d+0' % (initial_width, initial_height,
+                                 max(0, (screen_width - initial_width) // 2)))
+    root.minsize(min(960, max(1, screen_width - 24)),
+                 min(640, max(1, screen_height - 120)))
     root.configure(background=BG)
     style = ttk.Style(root)
     style.theme_use('clam')
@@ -105,15 +111,17 @@ def build_shell(app):
     # Pack this only on request; configuration is not part of every mission.
     app.endpoint = tk.StringVar(value='http://localhost:1234/v1')
     app.model = tk.StringVar(value=app.load_saved_model())
-    ttk.Label(connection, text='Server').pack(side='left')
-    ttk.Entry(connection, textvariable=app.endpoint, width=32).pack(side='left', padx=(8, 18))
-    ttk.Label(connection, text='Model').pack(side='left')
-    app.models = ttk.Combobox(connection, textvariable=app.model, width=30)
-    app.models.pack(side='left', fill='x', expand=True, padx=8)
+    connection.columnconfigure(1, weight=1, uniform='model-settings')
+    connection.columnconfigure(3, weight=1, uniform='model-settings')
+    ttk.Label(connection, text='Server').grid(row=0, column=0, sticky='w')
+    ttk.Entry(connection, textvariable=app.endpoint, width=1).grid(row=0, column=1, sticky='ew', padx=(8, 12))
+    ttk.Label(connection, text='Model').grid(row=0, column=2, sticky='w')
+    app.models = ttk.Combobox(connection, textvariable=app.model, width=1)
+    app.models.grid(row=0, column=3, sticky='ew', padx=8)
     app.models.bind('<<ComboboxSelected>>', app.save_model)
     app.models.bind('<FocusOut>', app.save_model)
     app.find_models = ttk.Button(connection, text='Find models', command=app.load_models)
-    app.find_models.pack(side='left')
+    app.find_models.grid(row=0, column=4, sticky='e')
     app.model.trace_add('write', lambda *_: app.model_badge.set(app.model.get().strip() or 'Choose a model in Settings'))
     app.model_badge.set(app.model.get().strip() or 'Choose a model in Settings')
 
@@ -121,7 +129,9 @@ def build_shell(app):
     body.pack(fill='both', expand=True)
     panes = ttk.Panedwindow(body, orient='horizontal')
     panes.pack(fill='both', expand=True)
-    left = ttk.Frame(panes, padding=(0, 8, 12, 0), width=285)
+    compact = screen_width <= 1100
+    left_width = 240 if compact else 285
+    left = ttk.Frame(panes, padding=(0, 8, 12, 0), width=left_width)
     panes.add(left, weight=0)
     nav = ttk.Frame(left)
     nav.pack(fill='x', pady=(0, 10))
@@ -134,11 +144,12 @@ def build_shell(app):
     app.import_button = ttk.Button(left, command=lambda: app.new_project(True))
     menu.add_command(label='New project...', command=app.new_project_button.invoke)
     menu.add_command(label='Import folder...', command=app.import_button.invoke)
+    menu.add_command(label='Calculator example...', command=app.new_calculator_example)
     new.configure(menu=menu)
     tree_frame = ttk.Frame(left)
     tree_frame.pack(fill='both', expand=True)
     app.projects = ttk.Treeview(tree_frame, show='tree', selectmode='browse', height=14)
-    app.projects.column('#0', width=285, minwidth=180, stretch=True)
+    app.projects.column('#0', width=left_width, minwidth=180, stretch=True)
     sy = ttk.Scrollbar(tree_frame, orient='vertical', command=app.projects.yview)
     sx = ttk.Scrollbar(tree_frame, orient='horizontal', command=app.projects.xview)
     app.projects.configure(yscrollcommand=sy.set, xscrollcommand=sx.set)
@@ -159,12 +170,24 @@ def build_shell(app):
 
     main = ttk.Frame(panes, padding=(10, 0, 0, 0))
     panes.add(main, weight=1)
-    context = ttk.Frame(main, padding=(0, 5, 0, 10))
+    context = ttk.Frame(main)
     context.pack(fill='x')
     app.context_title = tk.StringVar(value='Your coding workspace')
-    ttk.Label(context, textvariable=app.context_title, font=(family, 13, 'bold')).pack(anchor='w')
+    context_title_label = ttk.Label(context, textvariable=app.context_title, font=(family, 13, 'bold'))
+    context_title_label.pack(side='left', anchor='w')
     app.workflow_hint = tk.StringVar(value='Create or import a project to get started.')
-    ttk.Label(context, textvariable=app.workflow_hint, style='Muted.TLabel').pack(anchor='w', pady=(4, 0))
+    context_hint_label = ttk.Label(context, textvariable=app.workflow_hint, style='Muted.TLabel')
+    context_hint_label.pack(side='left', anchor='w', padx=(12, 0))
+    def fit_context(_event=None):
+        root.title('Hornet Coder | ' + __version__ + ' | ' + app.context_title.get())
+        enough = context.winfo_width() >= context_title_label.winfo_reqwidth() + context_hint_label.winfo_reqwidth() + 12
+        if enough and not context_title_label.winfo_manager():
+            context_title_label.pack(side='left', anchor='w', before=context_hint_label)
+        elif not enough and context_title_label.winfo_manager():
+            context_title_label.pack_forget()
+    context.bind('<Configure>', fit_context, add='+')
+    app.context_title.trace_add('write', lambda *_: fit_context())
+    app.workflow_hint.trace_add('write', lambda *_: fit_context())
     app.context_actions = ttk.Frame(main)
     app.context_actions.pack(fill='x', pady=(0, 8))
     app.init_button = ttk.Button(app.context_actions, text='Understand project', command=app.initialize_project, style='Accent.TButton')
@@ -182,13 +205,13 @@ def build_shell(app):
 
     editor = ttk.Panedwindow(main, orient='horizontal')
     editor.pack(fill='both', expand=True)
-    files_panel = ttk.Frame(editor, padding=(0, 0, 10, 0), width=190)
+    files_width = 150 if compact else 190
+    files_panel = ttk.Frame(editor, padding=(0, 0, 10, 0), width=files_width)
     editor.add(files_panel, weight=0)
-    ttk.Label(files_panel, text='FILES', style='Section.TLabel').pack(anchor='w', pady=(2, 8))
     app.add_to_prompt_button = ttk.Button(files_panel, text='Add to prompt', command=app.add_files_to_prompt)
     app.add_to_prompt_button.pack(fill='x', pady=(0, 6))
     app.files = ttk.Treeview(files_panel, show='tree', selectmode='extended', height=8)
-    app.files.column('#0', width=180, minwidth=100, stretch=True)
+    app.files.column('#0', width=files_width - 10, minwidth=100, stretch=True)
     fs = ttk.Scrollbar(files_panel, orient='vertical', command=app.files.yview)
     fx = ttk.Scrollbar(files_panel, orient='horizontal', command=app.files.xview)
     app.files.configure(yscrollcommand=fs.set, xscrollcommand=fx.set)
@@ -221,17 +244,19 @@ def build_shell(app):
         text.configure(state='disabled')
         app.views[label] = text
 
-    mission = ttk.Frame(main, padding=(0, 14, 0, 10))
+    mission = ttk.Frame(main, padding=(0, 4, 0, 4))
     mission.pack(side='bottom', fill='x', before=editor)
-    ttk.Label(mission, text='WHAT SHOULD CHANGE?', style='Section.TLabel').pack(anchor='w')
-    app.prompt_resize_handle = ttk.Label(mission, text='Resize prompt: drag up/down or use arrow keys',
+    prompt_heading = ttk.Frame(mission)
+    prompt_heading.pack(fill='x')
+    ttk.Label(prompt_heading, text='WHAT SHOULD CHANGE?', style='Section.TLabel').pack(side='left', anchor='w')
+    app.prompt_resize_handle = ttk.Label(prompt_heading, text='Resize prompt ↕',
         style='Muted.TLabel', cursor='sb_v_double_arrow', takefocus=True, anchor='e')
-    app.prompt_resize_handle.pack(fill='x')
+    app.prompt_resize_handle.pack(side='right')
     prompt_field = ttk.Frame(mission)
-    prompt_field.pack(fill='x', pady=(8, 8))
+    prompt_field.pack(fill='x', pady=(4, 4))
     app.goal = tk.Text(prompt_field, height=3, font=(family, 11), background=FIELD, foreground=TEXT,
                        insertbackground=TEXT, selectbackground='#29405b', relief='flat', padx=12,
-                       pady=10, highlightthickness=1, highlightbackground='#2b3a4e', highlightcolor=ACCENT, undo=True)
+                       pady=5, highlightthickness=1, highlightbackground='#2b3a4e', highlightcolor=ACCENT, undo=True)
     app.goal_scrollbar = ttk.Scrollbar(prompt_field, orient='vertical', command=app.goal.yview)
     app.goal.configure(yscrollcommand=app.goal_scrollbar.set)
     app.goal_scrollbar.pack(side='right', fill='y')
@@ -247,11 +272,12 @@ def build_shell(app):
     app.check_command = tk.StringVar(value='')
     app.options_panel = options = ttk.Frame(mission)
     app.confirm_plan = tk.BooleanVar(value=True)
-    ttk.Checkbutton(options, text='Review agent plan before execution', variable=app.confirm_plan).pack(anchor='w', pady=(0, 4))
-    ttk.Label(options, text='Default: Python/JSON syntax checks on changed files. You check functionality.', style='Muted.TLabel').pack(anchor='w')
-    ttk.Label(options, text='Extra VM check command (optional, runs only when supplied)', style='Muted.TLabel').pack(anchor='w')
-    ttk.Entry(options, textvariable=app.check_command).pack(fill='x', pady=(4, 4))
-    ttk.Checkbutton(options, text='Include latest VM output', variable=app.include_run).pack(anchor='w')
+    option_flags = ttk.Frame(options)
+    option_flags.pack(fill='x')
+    ttk.Checkbutton(option_flags, text='Review plan', variable=app.confirm_plan).pack(side='left')
+    ttk.Checkbutton(option_flags, text='VM output', variable=app.include_run).pack(side='left', padx=(4, 0))
+    ttk.Label(option_flags, text='Extra check:', style='Muted.TLabel').pack(side='left', padx=(4, 0))
+    ttk.Entry(option_flags, textvariable=app.check_command, width=1).pack(side='left', fill='x', expand=True, padx=(4, 0))
     app.mission_actions = actions = ttk.Frame(mission)
     actions.pack(fill='x')
     app.options_button = ttk.Button(actions, text='Mission options', command=lambda: toggle_panel(options, before=actions))
@@ -267,6 +293,25 @@ def build_shell(app):
     app.stop_button = ttk.Button(actions, text='Stop query', command=app.stop_query)
     app.review_button = ttk.Button(actions, text='Review pending work', command=app.review_pending)
     app.review_button.pack(side='right', padx=8)
+    # Large desktop fonts can make four full labels exceed a small window.
+    # Retain descriptive labels when space allows and shorten them otherwise.
+    action_labels = (
+        (app.options_button, 'Mission options', 'Options'),
+        (app.diagnose_button, 'Diagnose', 'Diagnose'),
+        (app.auto_button, 'Run mission', 'Run'),
+        (app.review_button, 'Review pending work', 'Review'),
+        (app.accept_mission_button, 'Accept reviewed changes', 'Accept'),
+        (app.approve_plan_button, 'Approve plan & continue', 'Approve plan'),
+    )
+    for button, _, _ in action_labels:
+        button.configure(width=0)
+    def fit_action_labels(event):
+        compact_actions = event.width < root.winfo_fpixels('600p')
+        for button, full, short in action_labels:
+            label = short if compact_actions else full
+            if button.cget('text') != label:
+                button.configure(text=label)
+    actions.bind('<Configure>', fit_action_labels, add='+')
     app.connection_notice = tk.StringVar()
     def update_notice(*_):
         app.connection_notice.set('Source and context are sent to ' + app.endpoint.get().strip())

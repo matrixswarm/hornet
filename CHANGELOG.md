@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.30.0 - 2026-11-13
+
+- Add optional Hornet Distil: full-context local chat, manually managed revisions,
+  import-as-distilled-context, safe successful-distill replacement, cancellation,
+  logical line numbers, and PDF/Text/Markdown revision exports.
+- Add per-session output-token and timeout controls to Distil, and keep Coder's
+  mission controls accessible at smaller window sizes with large desktop fonts.
+
 ## 0.20.0 - 2026-11-08
 
 - Add goal-scoped planning, dependency-aware execution, resumable mission

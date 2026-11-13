@@ -255,6 +255,19 @@ class App:
                     self.projects.selection_set(row)
                     self.projects.see(row)
 
+    def new_calculator_example(self):
+        if self.busy:
+            return
+        name = simpledialog.askstring('Calculator example', 'Project name:',
+                                      initialvalue='CalculatorExample', parent=self.root)
+        if not name:
+            return
+        def create():
+            revision = self.ws.create(name, 'calculator-example')
+            self.refresh(name, revision)
+            self.status.set('Calculator example created. Select Understand project to review it.')
+        self.guard(create)
+
     def new_project(self, importing=False):
         if self.busy:
             return

@@ -72,3 +72,33 @@ jobs:
           name: python-distributions
           path: dist/*
           if-no-files-found: error
+
+  distil:
+    name: Distil Qt / Python ${{ matrix.python }} / ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, windows-latest]
+        python: ['3.9', '3.13']
+    env:
+      QT_QPA_PLATFORM: offscreen
+      PYTHONDONTWRITEBYTECODE: '1'
+      PYTHONUTF8: '1'
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: ${{ matrix.python }}
+      - run: python -c "import os,subprocess,sys; subprocess.run([sys.executable,'-m','pip','wheel','--no-deps','.','-w',os.path.join(os.environ['RUNNER_TEMP'],'distil-wheels')],check=True)"
+      - name: Install Distil wheel with optional dependencies
+        run: python -c "import glob,os,subprocess,sys; wheels=glob.glob(os.path.join(os.environ['RUNNER_TEMP'],'distil-wheels','*.whl')); assert len(wheels)==1; subprocess.run([sys.executable,'-m','pip','install',wheels[0]+'[distil]'],check=True)"
+      - run: python -m pip check
+      - name: Test installed Distil outside the checkout
+        working-directory: ${{ runner.temp }}
+        run: |
+          python -c "from importlib.metadata import distribution; ep=next(e for e in distribution('matrixswarm-hornet').entry_points if e.name=='hornet-distil'); assert callable(ep.load())"
+          python -c "import os,subprocess,sys; subprocess.run([sys.executable,'-m','unittest','discover','-s',os.path.join(os.environ['GITHUB_WORKSPACE'],'tests','distil'),'-v'],check=True)"

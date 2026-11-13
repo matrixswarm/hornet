@@ -5,3 +5,4 @@ recursive-include tests *.py
 recursive-include docs *.md *.json
 recursive-include starter *.md *.py *.txt
 recursive-include signing *.asc *.fingerprint
+include start-distil.sh start-distil.bat

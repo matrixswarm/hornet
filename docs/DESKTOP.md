@@ -276,8 +276,8 @@ python3 -m hornet.desktop --workspace /tmp/hornet-smoke --smoke-test
 
 The model integration tests use a temporary local HTTP server; they do not
 certify a particular LM Studio model. The smoke test opens and closes the actual
-Tk window and requires a graphical display. Linux launch has been checked;
-Windows and macOS launchers require platform validation.
+Tk window and requires a graphical display. Linux and Windows 10 VM launch
+checks have been performed; macOS has not been validated.
 
 ## Diagnosis without edits
 
@@ -332,7 +332,7 @@ Project actions > Open Projects Folder opens the current workspace root in the s
 
 ### Goal plans and pointers
 
-New missions propose scoped agent-authored subgoals. Review agent plan before execution is enabled by default in Mission options; approve the plan to continue, then separately review and accept the final candidate. Project actions offers Goals and pointers and Resume interrupted mission. See [Goals, pointers, and safe continuation](GOALS-AND-POINTERS.md) for durable state, revision snapshots, evidence, and recovery limits.
+New missions propose scoped agent-authored subgoals. Review plan is enabled by default in Mission options; approve the plan to continue, then separately review and accept the final candidate. Project actions offers Goals and pointers and Resume interrupted mission. See [Goals, pointers, and safe continuation](GOALS-AND-POINTERS.md) for durable state, revision snapshots, evidence, and recovery limits.
 
 ## Reply chime
 

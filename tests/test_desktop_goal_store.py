@@ -1,5 +1,6 @@
 import json
 import os
+import shutil
 from pathlib import Path
 import subprocess
 import sys
@@ -329,6 +330,11 @@ class GoalStoreTests(unittest.TestCase):
         from hornet.desktop.goal_store import _native_path
         directory = (Path(self.temp.name) / 'projects' / ('project_' + 'p' * 56) /
                      'operations' / ('understand_' + 'x' * 64))
+        if os.name == 'nt':
+            # tempfile's normal cleanup cannot traverse these deliberately long
+            # paths when Windows long-path support is disabled.
+            extended = '\\\\?\\' + str(directory.absolute())
+            self.addCleanup(lambda: shutil.rmtree(extended) if os.path.exists(extended) else None)
         store = GoalStore(directory, self.identity)
         path = 'understand/files/file_' + 'f' * 40 + '/part_0000'
         store.begin(path, 'Describe source', 'abc', read_only=True)

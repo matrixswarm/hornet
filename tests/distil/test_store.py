@@ -204,7 +204,7 @@ class StoreTests(unittest.TestCase):
         with patch.dict('os.environ', {'HORNET_DISTIL_ROOT': str(Path(self.temp.name) / 'env')}):
             other = DistilStore()
             try:
-                self.assertEqual(other.root, Path(self.temp.name) / 'env')
+                self.assertTrue(other.root.samefile(Path(self.temp.name) / 'env'))
             finally:
                 other.close()
 

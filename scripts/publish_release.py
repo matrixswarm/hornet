@@ -20,15 +20,15 @@ import urllib.request
 import venv
 
 
-VERSION = "0.20.0"
+VERSION = "0.30.0"
 PROJECT = "matrixswarm-hornet"
-SOURCE_COMMIT = "c0d211674b8566e2d5c77cf0988da4931b73a272"
+SOURCE_COMMIT = "9f6f5bd0ffdea5803d227461ac4fcd0bc4d1248a"
 PRIMARY = "8086C2A9440B9226FA7A78E5BC0180CF9A935966"
 SUBKEY = "42FEF65AA81AD6567DEA209175EB12C3FF293394"
-MANIFEST_SHA256 = "2ad4f7b97a235c3e8cff00380933b914e94c71701223c47ae1cd2a782390f0de"
+MANIFEST_SHA256 = "78afe968a9f63381d2395c509115c628bc0b121c923ca8f24c1f9bd6a5a69f60"
 FILES = {
-    "matrixswarm_hornet-0.20.0-py3-none-any.whl": "9aa349cbec6b9e68e4e9b0e00009b8af6f7279b361e31d008d1a59fce3d038f5",
-    "matrixswarm_hornet-0.20.0.tar.gz": "0acbf83dae966d2fb6644c7a0dda794e579c1d81b15dddd60f38d3da14662c77",
+    "matrixswarm_hornet-0.30.0-py3-none-any.whl": "201e508cbd2302f9124c07929b4f44822ef4f905e6cc81522120161e7e4c0181",
+    "matrixswarm_hornet-0.30.0.tar.gz": "49c405e3f4fec755cdf4f955366df0bdbda84ae06564f737573252e40dd3240b",
 }
 INDEXES = {"testpypi": "https://test.pypi.org", "pypi": "https://pypi.org"}
 RELEASE = "https://github.com/matrixswarm/hornet/releases/download/v" + VERSION + "/"

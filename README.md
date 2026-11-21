@@ -5,17 +5,24 @@ with models. **Hornet Coder** (Mission Control) creates project revisions, build
 reviewable project maps and prepares coding missions. Hornet also includes the
 existing CLI, tool registry and standalone MCP server.
 
-Start with the [walkthrough](docs/WALKTHROUGH.md) and [desktop guide](docs/DESKTOP.md).
-The [architecture guide](docs/ARCHITECTURE.md) describes the workspace and shared
+Start with the [walkthrough](https://github.com/matrixswarm/hornet/blob/main/docs/WALKTHROUGH.md) and [desktop guide](https://github.com/matrixswarm/hornet/blob/main/docs/DESKTOP.md).
+The [architecture guide](https://github.com/matrixswarm/hornet/blob/main/docs/ARCHITECTURE.md) describes the workspace and shared
 services. Project revisions and mission records stay on your machine; source
 and prompts selected for a mission are sent to the configured model server.
 
 ## Start Hornet Coder
 
-To choose between Coder and Distil at startup, run `hornet-launcher` after
-installing Hornet with the Distil extra (`pip install '.[distil]'`), or run
-`python -m hornet.launcher` from the checkout using that environment. Choose
-an application in the launcher to open it.
+To install from PyPI without cloning the repository, use a Python 3.9 or newer
+virtual environment. Coder requires Tk support.
+
+```console
+python -m pip install "matrixswarm-hornet[distil]"
+hornet-launcher
+```
+
+Choose Coder or Distil in the launcher. From a source checkout, install with
+`python -m pip install ".[distil]"` instead, then run `hornet-launcher` or
+`python -m hornet.launcher` in the same environment.
 
 In Coder, **+ New → Calculator example** creates an optional working sample
 with tests. You can use it to practice a mission without importing your own code.
@@ -49,8 +56,8 @@ line numbers, and PDF/Text/Markdown export. The full active chat is sent only to
 your configured model server. Distil's data defaults to `~/hornet_distil` and
 should be backed up separately from the code.
 
-Install the optional GUI with `python -m pip install '.[distil]'`, then run
-`hornet-distil`. See the [Distil guide](docs/DISTIL.md) for setup, model settings,
+After installing the Distil extra as shown above, run `hornet-distil` to open
+Distil directly. See the [Distil guide](https://github.com/matrixswarm/hornet/blob/main/docs/DISTIL.md) for setup, model settings,
 storage, and recovery behavior.
 
 ## Support Hornet
@@ -128,7 +135,7 @@ checks is evidence of the checked behavior, and exported code still needs review
 Hornet supports a project-root `hive.json` mapping labels to
 model connections. Run `hornet hive init`, select `--agent gemma`, or assign an
 unfinished goal cell with `hornet hive assign RUN CELL --agent qwen`.
-See [the hive guide](docs/HIVE.md) for role routing, shared resource claims and
+See [the hive guide](https://github.com/matrixswarm/hornet/blob/main/docs/HIVE.md) for role routing, shared resource claims and
 resume. Named agents are available in 0.16.0 and later.
 
 ## Quiet supervision
@@ -136,15 +143,15 @@ resume. Named agents are available in 0.16.0 and later.
 In 0.17.0, explicitly enroll saved goals for bounded automatic resume. The
 periodic scan uses no inference and respects pauses, questions, active workers
 and remaining budgets. Each activation leaves a receipt; uncertain outcomes
-stay stopped for inspection. See [the supervisor guide](docs/SUPERVISOR.md).
+stay stopped for inspection. See [the supervisor guide](https://github.com/matrixswarm/hornet/blob/main/docs/SUPERVISOR.md).
 
 ## Discoverable tools for coding cells
 
 Hornet 0.18.1 improves worker setup errors: missing credential fields, local
 file paths and the required worker account are checked before SSH. See
-[worker setup troubleshooting](starter/WORKER-SETUP.md#diagnose-a-configuration-failure-before-retrying).
+[worker setup troubleshooting](https://github.com/matrixswarm/hornet/blob/main/starter/WORKER-SETUP.md#diagnose-a-configuration-failure-before-retrying).
 
-Hornet 0.18.0 adds a [cell tool registry](docs/REGISTRY.md). Agents discover a
+Hornet 0.18.0 adds a [cell tool registry](https://github.com/matrixswarm/hornet/blob/main/docs/REGISTRY.md). Agents discover a
 capability, inspect its exact contract, apply a scoped transformation, and retain
 write and readback receipts. Use `--registry-only` to require these tools for edits:
 
@@ -155,7 +162,7 @@ hornet autowork --worker-config coding/worker.json --agent gemma --scope-file ca
 Replace `gemma` with your configured hive label. The registry offers 17 reviewed
 cell tools for Python, JSON and text, plus two recipes. The controller checks
 source hashes, enforces file scope, and runs the cell and goal acceptance checks.
-See [the registry guide](docs/REGISTRY.md) for namespaces, discovery, extension
+See [the registry guide](https://github.com/matrixswarm/hornet/blob/main/docs/REGISTRY.md) for namespaces, discovery, extension
 rules and the standalone MCP server.
 
 ## Questions wait for you
@@ -223,7 +230,7 @@ See [CONTRIBUTING.md](https://github.com/matrixswarm/hornet/blob/main/CONTRIBUTI
 for development and [SECURITY.md](https://github.com/matrixswarm/hornet/blob/main/SECURITY.md)
 for the execution boundary and reporting.
 
-The [roadmap](docs/ROADMAP.md) records planned work, including a Strategy-pattern
+The [roadmap](https://github.com/matrixswarm/hornet/blob/main/docs/ROADMAP.md) records planned work, including a Strategy-pattern
 builder that assembles agent implementations through durable contracts.
 
 ## License
@@ -239,10 +246,10 @@ see [LICENSE](https://github.com/matrixswarm/hornet/blob/main/LICENSE).
 Run `hornet hive terminal` from the project root to browse saved goals, all
 cells and active cells. Select a cell to see its inverted tree, agent, observed
 checks and time since the last recorded action. Named connections may use local
-or compatible remote model servers. See [Hive connections](docs/HIVE.md) and the
-[terminal guide](docs/HIVE-TERMINAL.md). These features are available in 0.16.0.
+or compatible remote model servers. See [Hive connections](https://github.com/matrixswarm/hornet/blob/main/docs/HIVE.md) and the
+[terminal guide](https://github.com/matrixswarm/hornet/blob/main/docs/HIVE-TERMINAL.md). These features are available in 0.16.0.
 
-The [goal controller](docs/GOAL-CONTROLLER.md) adds optional root-plan
+The [goal controller](https://github.com/matrixswarm/hornet/blob/main/docs/GOAL-CONTROLLER.md) adds optional root-plan
 approval by a user or named supervisor, bounded recovery for repeated cell
 operations, and a closeout receipt after the controller releases its leases.
 Drafts, rejected attempts and frozen checks stay available across resumes.

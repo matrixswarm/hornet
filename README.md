@@ -13,7 +13,7 @@ and prompts selected for a mission are sent to the configured model server.
 ## Start Hornet Coder
 
 To install from PyPI without cloning the repository, use a Python 3.9 or newer
-virtual environment. Coder requires Tk support.
+virtual environment. The launcher and Coder require Tk support.
 
 ```console
 python -m pip install "matrixswarm-hornet[distil]"
@@ -57,7 +57,7 @@ your configured model server. Distil's data defaults to `~/hornet_distil` and
 should be backed up separately from the code.
 
 After installing the Distil extra as shown above, run `hornet-distil` to open
-Distil directly. See the [Distil guide](https://github.com/matrixswarm/hornet/blob/main/docs/DISTIL.md) for setup, model settings,
+Distil directly without the Tk-based launcher. See the [Distil guide](https://github.com/matrixswarm/hornet/blob/main/docs/DISTIL.md) for setup, model settings,
 storage, and recovery behavior.
 
 ## Support Hornet
